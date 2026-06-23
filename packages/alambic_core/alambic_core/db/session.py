@@ -20,9 +20,9 @@ from contextlib import contextmanager
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from ..security.fernet_provider import FernetSecretProvider
 from .config import CoreSettings
 from .types import set_secret_provider
-from ..security.fernet_provider import FernetSecretProvider
 
 # Singletons de module (initialisés par init_core / get_engine).
 _engine: Engine | None = None

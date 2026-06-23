@@ -14,11 +14,11 @@ NB : implémentation volontairement esquissée (pseudo-SQL) — le but de cette
 démo est l'orchestration, pas le schéma complet. psycopg/SQLAlchemy en prod.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def _now():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 class Repo:

@@ -31,10 +31,11 @@ se fait via resume_from + le SweepStuckTransactions qui relit la table
 transactions. C'est exactement ton design actuel — d'où le faible surcoût.
 """
 
-from celery import chain, group, chord
+from celery import group
+
 from core.celery_app import app
 from core.repo import Repo
-from tasks.ingestion import create_transaction, extract_files, create_documents
+from tasks.ingestion import create_documents, create_transaction, extract_files
 
 SOURCE = "01_Ingestion"
 

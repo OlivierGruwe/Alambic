@@ -12,6 +12,7 @@ des workers dédiés par queue avec la concurrence que tu veux.
 """
 
 import os
+
 from celery import Celery
 from kombu import Queue
 

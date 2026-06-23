@@ -4,12 +4,12 @@ from .base import BaseRepository
 from .entities import (
     AccountRepository,
     ConfigRepository,
-    DoctypeRepository,
-    TransactionRepository,
-    DocumentRepository,
-    DocumentIndexRepository,
-    MessageRepository,
     CostRepository,
+    DoctypeRepository,
+    DocumentIndexRepository,
+    DocumentRepository,
+    MessageRepository,
+    TransactionRepository,
 )
 
 __all__ = [

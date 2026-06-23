@@ -74,6 +74,24 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = [
+    # UP037 retirerait les quotes des forward-refs Mapped["Config"], ce qui
+    # casse les relations SQLAlchemy (le modèle cible n'est pas encore importé).
+    # Les quotes sont VOLONTAIRES et nécessaires ici.
+    "UP037",
+    # UP042 proposerait StrEnum, mais (str, Enum) est volontaire : on préserve
+    # exactement les valeurs string de flowerscan_lib (compat données existantes).
+    "UP042",
+    # UP046 (syntaxe type params 3.12 class C[T]) : Generic[ModelT] reste clair
+    # et compatible. Pas de gain à migrer.
+    "UP046",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Les migrations Alembic sont générées : on tolère leur style (Union, imports).
+"**/migrations/*" = ["UP007", "UP035", "I001"]
+# Les tests peuvent utiliser des asserts larges quand c'est volontaire.
+"**/tests/*" = ["B017"]
 
 [tool.pytest.ini_options]
 # testpaths couvre le projet ET le package (un seul 'make test' voit tout).

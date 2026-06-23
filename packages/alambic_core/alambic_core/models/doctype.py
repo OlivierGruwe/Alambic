@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import Boolean, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from ..db.base import Base, TimestampMixin, AuditMixin, uuid_str
+from ..db.base import AuditMixin, Base, TimestampMixin, uuid_str
 
 
 class Doctype(Base, TimestampMixin, AuditMixin):

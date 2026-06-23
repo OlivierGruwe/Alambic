@@ -38,8 +38,8 @@ def _secret_provider():
 @pytest.fixture
 def engine():
     """Moteur SQLite en mémoire, schéma créé/détruit par test."""
-    from alambic_core.db.base import Base
     import alambic_core.models  # noqa: F401 — enregistre les modèles sur Base
+    from alambic_core.db.base import Base
 
     eng = create_engine("sqlite://")
     Base.metadata.create_all(eng)

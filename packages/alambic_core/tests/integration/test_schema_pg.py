@@ -7,16 +7,14 @@ Tous marqués @pytest.mark.integration (nécessitent Docker).
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
 from alambic_core.models import (
     Account,
-    Cost,
     Document,
-    DocumentIndex,
     Message,
     Transaction,
 )

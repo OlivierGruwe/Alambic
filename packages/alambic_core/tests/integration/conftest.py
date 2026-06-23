@@ -43,8 +43,8 @@ def pg_engine():
         # On crée le schéma directement depuis les modèles (create_all) plutôt
         # que via Alembic : plus simple en test, et ça valide que les modèles
         # produisent un schéma PostgreSQL valide (JSONB, contraintes…).
-        from alambic_core.db.base import Base
         import alambic_core.models  # noqa: F401 — enregistre les modèles
+        from alambic_core.db.base import Base
 
         Base.metadata.create_all(engine)
 
