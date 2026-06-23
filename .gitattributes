@@ -1,0 +1,32 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Normalisation des fins de ligne — CRITIQUE sous Windows/Git Bash.
+# Sans ça, un script .sh édité sous Windows reçoit des CRLF et le shell Linux
+# du conteneur le refuse ("bad interpreter: /bin/sh^M"). On force LF partout
+# où c'est exécuté dans un environnement Unix.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Par défaut : Git normalise les fins de ligne des fichiers texte.
+* text=auto
+
+# Fichiers qui DOIVENT être en LF (exécutés/lus par Linux dans les conteneurs)
+*.sh            text eol=lf
+*.py            text eol=lf
+*.sql           text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.toml          text eol=lf
+*.ini           text eol=lf
+*.env           text eol=lf
+*.example       text eol=lf
+Makefile        text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+
+# Fichiers binaires : Git ne touche pas aux fins de ligne
+*.png           binary
+*.jpg           binary
+*.pdf           binary
+*.gz            binary
+*.dump          binary

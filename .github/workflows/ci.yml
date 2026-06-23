@@ -1,0 +1,71 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# CI Alambic — lint + tests à chaque push et pull request.
+#
+# Deux jobs :
+#   • quality   : ruff (lint + format) + 26 tests unitaires (SQLite, rapides,
+#                 sans Docker). Échoue vite si quelque chose est cassé.
+#   • integration : 8 tests testcontainers sur un vrai PostgreSQL. Plus lent
+#                 (démarre un conteneur), donc séparé pour ne pas ralentir le
+#                 retour rapide du job quality.
+#
+# Versions d'actions épinglées par tag immuable (sécurité chaîne d'appro :
+# setup-uv ne publie plus de tags mobiles @v8, on épingle @v8.1.0).
+# ═══════════════════════════════════════════════════════════════════════════════
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Annule les runs précédents encore en cours sur la même branche (économise des minutes).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Job 1 : qualité (lint + format + tests unitaires) ──────────────────────
+  quality:
+    name: Lint & tests unitaires
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Installer uv (+ Python du projet)
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Synchroniser les dépendances (workspace, verrouillé)
+        run: uv sync --locked --all-extras --dev
+
+      - name: Lint (ruff check)
+        run: uv run ruff check .
+
+      - name: Format (ruff format --check)
+        run: uv run ruff format --check .
+
+      - name: Tests unitaires (SQLite, hors Docker)
+        run: uv run pytest -q -m "not integration"
+
+  # ── Job 2 : tests d'intégration (testcontainers + vrai PostgreSQL) ─────────
+  integration:
+    name: Tests d'intégration (Postgres)
+    runs-on: ubuntu-latest
+    # Ne lance l'intégration que si la qualité passe (évite de gâcher du temps Docker).
+    needs: quality
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Installer uv (+ Python du projet)
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Synchroniser les dépendances (workspace, verrouillé)
+        run: uv sync --locked --all-extras --dev
+
+      # Le runner ubuntu-latest a Docker préinstallé : testcontainers démarre
+      # un PostgreSQL jetable tout seul, pas besoin de service: postgres ici.
+      - name: Tests d'intégration (testcontainers Postgres)
+        run: uv run pytest packages/alambic_core/tests -q -m integration

@@ -1,0 +1,64 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# .gitignore — Alambic
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Secrets : NE JAMAIS committer ─────────────────────────────────────────────
+# Ces fichiers contiennent mots de passe, clés de chiffrement, secrets RPC.
+.env
+.env.*
+!.env.example
+garage.toml
+!garage.example.toml
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+wheels/
+
+# ── Environnements virtuels ───────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── uv ────────────────────────────────────────────────────────────────────────
+# uv.lock SE COMMITE (versions verrouillées, requis par la CI). On NE l'ignore PAS.
+.uv-cache/
+
+# ── Tests / couverture ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.cache/
+
+# ── Outils / linters ──────────────────────────────────────────────────────────
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+
+# ── IDE / éditeurs ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Données locales Docker (si montées en bind) ──────────────────────────────
+meta/
+data/
+*.log

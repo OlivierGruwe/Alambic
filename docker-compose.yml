@@ -1,0 +1,109 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Alambic — infrastructure de développement local.
+# Services : PostgreSQL, RabbitMQ, Redis, MinIO (+ init des buckets).
+# Les workers Celery seront ajoutés quand leur code existera.
+#
+# Démarrage : make up    (ou docker compose up -d)
+# Healthchecks réels sur chaque service → 'depends_on: condition: service_healthy'
+# garantit qu'un service n'est utilisé que lorsqu'il répond vraiment.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: alambic
+
+services:
+  # ── PostgreSQL : données métier (remplace DynamoDB) ────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-alambic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alambic_dev_pwd}
+      POSTGRES_DB: ${POSTGRES_DB:-alambic}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready = vrai test de disponibilité, pas juste "conteneur lancé"
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alambic} -d ${POSTGRES_DB:-alambic}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - alambic_net
+
+  # ── RabbitMQ : broker Celery (les 3 queues de priorité) ────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-alambic}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-alambic_dev_pwd}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"        # AMQP
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"  # console web
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - alambic_net
+
+  # ── Redis : backend de résultats Celery ────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]  # persistance AOF
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - alambic_net
+
+  # ── Garage : stockage objet S3-compatible souverain (remplace S3/MinIO) ────
+  # Garage est développé par Deuxfleurs (association FR), écrit en Rust, AGPLv3.
+  garage:
+    image: dxflrs/garage:v2.3.0
+    command: ["/garage", "server"]
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro   # config (rpc_secret à remplir)
+      - garage_meta:/var/lib/garage/meta     # métadonnées (SSD en prod)
+      - garage_data:/var/lib/garage/data     # données (gros stockage en prod)
+    ports:
+      - "${GARAGE_S3_PORT:-3900}:3900"      # API S3
+      - "${GARAGE_WEB_PORT:-3902}:3902"     # serveur web (optionnel)
+      - "${GARAGE_ADMIN_PORT:-3903}:3903"   # API admin
+    # Pas de healthcheck Docker : l'image Garage est minimaliste (scratch, sans
+    # curl/wget/nc) et 'garage status' dépend de la layout (pas encore créée au
+    # démarrage). C'est garage-init qui attend que Garage réponde, via sa propre
+    # boucle (until garage status). Le healthcheck Docker ferait doublon.
+    restart: unless-stopped
+    networks:
+      - alambic_net
+
+    # Note : l'initialisation (layout + buckets + clé) se fait via 'make garage-init',
+    # PAS via un service compose. L'image Garage est distroless (pas de shell),
+    # donc on ne peut pas y lancer de script d'init. La cible Makefile pilote les
+    # commandes avec 'docker compose exec garage /garage …'.
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  redis_data:
+  garage_meta:
+  garage_data:
+
+networks:
+  alambic_net:
+    driver: bridge

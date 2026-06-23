@@ -1,0 +1,25 @@
+"""Repositories d'alambic_core — couche d'accès données (Repository pattern)."""
+
+from .base import BaseRepository
+from .entities import (
+    AccountRepository,
+    ConfigRepository,
+    DoctypeRepository,
+    TransactionRepository,
+    DocumentRepository,
+    DocumentIndexRepository,
+    MessageRepository,
+    CostRepository,
+)
+
+__all__ = [
+    "BaseRepository",
+    "AccountRepository",
+    "ConfigRepository",
+    "DoctypeRepository",
+    "TransactionRepository",
+    "DocumentRepository",
+    "DocumentIndexRepository",
+    "MessageRepository",
+    "CostRepository",
+]
