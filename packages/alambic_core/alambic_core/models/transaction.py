@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from ..db.base import Base, TimestampMixin, AuditMixin, uuid_str
+from ..db.base import AuditMixin, Base, TimestampMixin, uuid_str
 
 
 class Transaction(Base, TimestampMixin, AuditMixin):

@@ -47,7 +47,8 @@ class CoreSettings(BaseSettings):
 
     # Clé(s) de chiffrement Fernet. Plusieurs clés séparées par des virgules
     # permettent la rotation (la première chiffre, toutes déchiffrent).
-    # Génération : python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # Génération :
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  # noqa: E501
     secret_key: str = Field(default="")
 
     # Echo SQL (debug) — à laisser False en prod.

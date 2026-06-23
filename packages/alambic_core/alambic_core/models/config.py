@@ -29,7 +29,7 @@ from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from ..db.base import Base, TimestampMixin, AuditMixin, uuid_str
+from ..db.base import AuditMixin, Base, TimestampMixin, uuid_str
 from ..db.types import EncryptedString
 
 

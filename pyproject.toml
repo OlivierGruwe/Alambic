@@ -92,6 +92,8 @@ ignore = [
 "**/migrations/*" = ["UP007", "UP035", "I001"]
 # Les tests peuvent utiliser des asserts larges quand c'est volontaire.
 "**/tests/*" = ["B017"]
+# Modèles : F821 sur les forward-refs SQLAlchemy (Mapped["Account"]) est un faux positif.
+"**/models/*" = ["F821"]
 
 [tool.pytest.ini_options]
 # testpaths couvre le projet ET le package (un seul 'make test' voit tout).
