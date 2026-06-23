@@ -58,6 +58,16 @@ class TransactionRepository(BaseRepository[Transaction]):
             self.session.scalars(select(Transaction).where(Transaction.status == status)).all()
         )
 
+    def by_transaction_key(self, transaction_key: str) -> Transaction | None:
+        """Retrouve une transaction par sa clé déterministe (hash bucket+clé S3).
+
+        Sert à l'idempotence du déclencheur d'ingestion : si une transaction
+        existe déjà pour cette clé, on ne relance pas le workflow.
+        """
+        return self.session.scalars(
+            select(Transaction).where(Transaction.transaction_key == transaction_key)
+        ).first()
+
     def by_account(self, account_id: str) -> list[Transaction]:
         return list(
             self.session.scalars(

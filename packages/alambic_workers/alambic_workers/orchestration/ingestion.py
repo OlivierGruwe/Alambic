@@ -3,39 +3,53 @@
 ORCHESTRATEUR INGESTION — remplace IngestionStateMachine (01_Ingestion.asl.json)
 ═══════════════════════════════════════════════════════════════════════════════
 
-Traduction état-par-état de l'ASL. La table de correspondance :
+Traduction état-par-état de l'ASL :
 
     ASL (Step Functions)                  Ici (Celery)
     ────────────────────────────────────  ──────────────────────────────────────
     CheckResumeMode (Choice)              if payload.get("resume_from")==...
-    CreateTransaction (Task)              create_transaction.delay()
+    CreateTransaction (Task)              create_transaction()
     PrepareSplit / PrepareDocumentId      _prepare_document() — pure Python
-      (Pass + intrinsics States.*)          (States.StringSplit/Format = f-strings)
     CreateDocument (dynamodb:updateItem)  repo.upsert_document()
-    WriteMetadataIndexes (Map+Choice)     group() de put_metadata_index, filtré
+    WriteMetadataIndexes (Map+Choice)     boucle filtrée -> repo.put_metadata_index
     UpdateTransaction* (dynamodb)         repo.update_transaction()
-    ExtractFiles / CreateDocuments (Task) chain de tasks Celery
-    DispatchProcessing (Map, sync:2)      chord/group de start_processing
+    ExtractFiles / CreateDocuments (Task) appels de fonctions séquentiels
+    DispatchProcessing (Map, sync:2)      group() de run_processing
     FailTransaction* / FailTransactionEarly  bloc except -> repo + add_message
 
-POURQUOI ce fichier existe (vs juste une chain Celery) :
-ton ASL n'est pas une simple séquence — il intercale des écritures d'état DB
-entre chaque task (WORKING/DOC_CREATED, WORKING/DOC_EXTRACTED, COMPLETED) et a
-deux chemins d'erreur distincts (avant/après que transactionId existe). Un
-orchestrateur explicite reproduit ça lisiblement. C'est lui qui porte la
-"durabilité d'état" que Step Functions te donnait gratuitement.
+POURQUOI un orchestrateur explicite (vs une simple chain Celery) :
+l'ASL intercale des écritures d'état DB entre chaque étape (WORKING/DOC_CREATED,
+WORKING/DOC_EXTRACTED, COMPLETED) et a deux chemins d'erreur distincts
+(avant/après que la transaction existe). Un orchestrateur explicite reproduit
+ça lisiblement. C'est lui qui porte la "durabilité d'état" que Step Functions
+donnait gratuitement — l'état vit dans les tables transactions/documents/messages
+d'alambic_core, pas dans le moteur Celery.
 
-⚠️ Limite assumée (cf. notre échange) : si CE process meurt entre deux étapes,
-il n'y a pas de replay automatique du workflow comme Step Functions. La reprise
-se fait via resume_from + le SweepStuckTransactions qui relit la table
-transactions. C'est exactement ton design actuel — d'où le faible surcoût.
+CHOIX DE CHAÎNAGE (le plus solide pour ce cas) :
+les étapes internes (create_transaction, extract_files, create_documents) sont
+appelées comme de SIMPLES FONCTIONS, pas via .delay()/.apply() ni chain. Raison :
+elles font partie d'une même unité de travail séquentielle pilotée par cet
+orchestrateur, qui écrit l'état entre chacune. Pas d'attente inter-worker (anti-
+pattern Celery), pas de dispersion de la logique d'état. Le mécanisme distribué
+de Celery (group) est réservé à ce qui doit VRAIMENT être parallèle : le
+dispatch d'un Processing par document.
+
+⚠️ Limite assumée : si CE process meurt entre deux étapes, pas de replay
+automatique. La reprise se fait via resume_from + SweepStuckTransactions qui
+relit la table transactions. C'est le design retenu — faible surcoût.
 """
+
+from __future__ import annotations
 
 from celery import group
 
-from core.celery_app import app
-from core.repo import Repo
-from tasks.ingestion import create_documents, create_transaction, extract_files
+from alambic_workers.celery_app import app
+from alambic_workers.repo import Repo
+from alambic_workers.tasks.ingestion import (
+    create_documents,
+    create_transaction,
+    extract_files,
+)
 
 SOURCE = "01_Ingestion"
 
@@ -44,8 +58,8 @@ SOURCE = "01_Ingestion"
 def _prepare_document(payload: dict) -> dict:
     """États PrepareSplit + PrepareDocumentId.
 
-    ASL utilisait States.StringSplit($.transaction.transactionId, 'trx-')
-    puis States.Format('doc-{}', ...). En Python c'est trivial :
+    ASL : States.StringSplit($.transaction.transactionId, 'trx-') puis
+    States.Format('doc-{}', ...). Trivial en Python.
     """
     tx_id = payload["transaction"]["transactionId"]
     split_id = tx_id.split("trx-")  # States.StringSplit
@@ -58,12 +72,11 @@ def _prepare_document(payload: dict) -> dict:
     return payload
 
 
-def _write_metadata_indexes(repo: Repo, payload: dict):
+def _write_metadata_indexes(repo: Repo, payload: dict) -> None:
     """État Map WriteMetadataIndexes + Choice FilterEmptyMetadata.
 
-    Le Map ASL (MaxConcurrency 10) avec son filtre devient soit une simple
-    boucle (si volumes faibles), soit un group() Celery (si tu veux le
-    parallélisme réel). Le filtre name/value non-vides est reproduit tel quel.
+    Le filtre (name/value non vides) est reproduit tel quel = l'état Choice
+    FilterEmptyMetadata. put_metadata_index est idempotent côté repo.
     """
     document_id = payload["document"]["documentId"]
     for item in payload.get("datas", []):
@@ -74,23 +87,24 @@ def _write_metadata_indexes(repo: Repo, payload: dict):
 
 
 # ── Le workflow principal ────────────────────────────────────────────────────
-@app.task(name="orchestration.ingestion.run", bind=True, acks_late=True)
-def run_ingestion(self, payload: dict, repo_conn=None):
+@app.task(name="alambic_workers.ingestion.run", bind=True, acks_late=True)
+def run_ingestion(self, payload: dict) -> dict:
     """Point d'entrée — équivalent d'une exécution de l'IngestionStateMachine.
 
-    Déclenché par ta Lambda IngestionTrigger (devenue une task ou un simple
-    .delay() depuis l'événement S3/MinIO). `payload` = l'input de la SM.
+    Déclenché depuis l'événement S3/MinIO (Garage). `payload` = l'input de la SM.
+    Le Repo ouvre ses propres sessions autonomes (session_scope), donc le worker
+    doit avoir appelé init_core() au démarrage (fait par celery_app).
     """
-    repo = Repo(repo_conn)
+    repo = Repo()
 
     # ── CheckResumeMode (Choice) ─────────────────────────────────────────────
     if payload.get("resume_from") == "DISPATCH":
         # ResumeDispatch : documents/transactionId déjà dans l'input
         return _dispatch_processing(repo, payload)
 
-    # ── CreateTransaction (Task) + Catch -> FailTransactionEarly ─────────────
+    # ── CreateTransaction + Catch -> FailTransactionEarly ────────────────────
     try:
-        payload = create_transaction.apply(args=[payload]).get()
+        payload = create_transaction(payload)
     except Exception as e:
         # FailTransactionEarly : transactionId pas encore à la racine
         tx_id = payload.get("transaction", {}).get("transactionId")
@@ -103,11 +117,10 @@ def run_ingestion(self, payload: dict, repo_conn=None):
     try:
         # ── PrepareSplit + PrepareDocumentId (Pass) ──────────────────────────
         payload = _prepare_document(payload)
-        document_id = payload["document"]["documentId"]
         tx_id = payload["transactionId"]
 
         # ── CreateDocument (dynamodb:updateItem) ─────────────────────────────
-        repo.upsert_document(document_id, tx_id, payload["document"]["file"])
+        repo.upsert_document(payload["document"]["documentId"], tx_id, payload["document"]["file"])
 
         # ── WriteMetadataIndexes (Map + Choice filter) ───────────────────────
         _write_metadata_indexes(repo, payload)
@@ -115,12 +128,9 @@ def run_ingestion(self, payload: dict, repo_conn=None):
         # ── UpdateTransactionCreated : WORKING / DOC_CREATED ─────────────────
         repo.update_transaction(tx_id, status="WORKING", process="DOC_CREATED")
 
-        # ── ExtractFiles -> CreateDocuments (deux Task séquentielles) ────────
-        # En Celery : une chain. .apply().get() ici car on est déjà dans un
-        # worker et on veut le résultat avant de continuer (= comportement
-        # synchrone des états Task de l'ASL).
-        payload = extract_files.apply(args=[payload]).get()
-        payload = create_documents.apply(args=[payload]).get()
+        # ── ExtractFiles -> CreateDocuments (séquentiel, même unité de travail)
+        payload = extract_files(payload)
+        payload = create_documents(payload)
 
         # ── UpdateTransactionExtracted : WORKING / DOC_EXTRACTED ─────────────
         repo.update_transaction(tx_id, status="WORKING", process="DOC_EXTRACTED")
@@ -135,24 +145,26 @@ def run_ingestion(self, payload: dict, repo_conn=None):
     except Exception as e:
         # ── FailTransaction + FailTransactionMessage -> WorkflowFailed ───────
         tx_id = payload.get("transactionId")
-        repo.update_transaction(tx_id, status="ERROR")
-        repo.add_message(tx_id, "ERROR", SOURCE, f"Error: {e}")
+        if tx_id:
+            repo.update_transaction(tx_id, status="ERROR")
+            repo.add_message(tx_id, "ERROR", SOURCE, f"Error: {e}")
         raise
 
 
 def _dispatch_processing(repo: Repo, payload: dict):
     """État DispatchProcessing (Type: Map, MaxConcurrency 10).
 
-    ASL lançait un ProcessingStateMachine EXPRESS par document, en parallèle,
-    avec startExecution.sync:2 (attend la fin) + Retry(2) + Catch ->
-    MarkDocumentDispatchError.
+    ASL lançait un ProcessingStateMachine EXPRESS par document, en parallèle.
+    En Celery : un group() de run_processing, une par document. Le parallélisme
+    réel vient du nombre de workers sur la queue (--concurrency), pas d'un
+    MaxConcurrency déclaratif.
 
-    En Celery : un group() de la task d'orchestration Processing, une par
-    document. Le parallélisme réel vient du nombre de workers sur la queue,
-    pas d'un MaxConcurrency déclaratif (à régler via --concurrency du worker).
+    C'est ICI qu'on utilise le mécanisme distribué de Celery (et nulle part
+    ailleurs dans ce workflow) : le dispatch est la seule étape réellement
+    parallèle.
     """
-    # Import tardif pour éviter le cycle (Processing importera des trucs d'ici)
-    from orchestration.processing import run_processing
+    # Import tardif pour éviter le cycle (processing importera des trucs d'ici)
+    from alambic_workers.orchestration.processing import run_processing
 
     documents = payload.get("documents", [])
     job = group(
@@ -168,7 +180,4 @@ def _dispatch_processing(repo: Repo, payload: dict):
         )
         for doc in documents
     )
-    # .apply_async() lance le parallélisme ; en prod on chaîne un callback
-    # (chord) vers UpdateTransactionCompleted plutôt que d'attendre ici.
-    result = job.apply_async()
-    return result
+    return job.apply_async()

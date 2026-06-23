@@ -278,3 +278,10 @@ clean: ## Supprime caches Python et artefacts de build
 clean-all: clean ## clean + supprime .venv (réinstall via 'make install')
 	@rm -rf .venv
 	@printf "$(C_GREEN).venv supprimé.$(C_OFF)\n"
+
+workers-test:
+	uv run pytest packages/alambic_workers/tests/ -v
+
+workers-fmt:
+	uv run ruff check --fix packages/alambic_workers/
+	uv run ruff format packages/alambic_workers/
