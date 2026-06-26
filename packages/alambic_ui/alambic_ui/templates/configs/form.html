@@ -1,0 +1,447 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Nouvelle configuration' if mode == 'create' else 'Éditer la configuration' }}{% endblock %}
+
+{% macro txt(key, label, hint='') %}
+  <div class="form-group">
+    <label>{{ label }}</label>
+    <input type="text" name="{{ key }}" class="form-control" value="{{ values.get(key, '') }}">
+    {% if hint %}<div class="form-hint">{{ hint }}</div>{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro num(key, label, mn='', mx='', step='') %}
+  <div class="form-group">
+    <label>{{ label }}</label>
+    <input type="number" name="{{ key }}" class="form-control" value="{{ values.get(key, '') }}"
+           {% if mn != '' %}min="{{ mn }}"{% endif %} {% if mx != '' %}max="{{ mx }}"{% endif %}
+           {% if step != '' %}step="{{ step }}"{% endif %}>
+  </div>
+{% endmacro %}
+
+{% macro slider(key, label) %}
+  <div class="form-group">
+    <label>{{ label }} <span class="slider-val" data-for="{{ key }}">{{ values.get(key, '0') }}</span></label>
+    <input type="range" name="{{ key }}" class="form-range" min="0" max="1" step="0.05"
+           value="{{ values.get(key, '0') or '0' }}"
+           oninput="document.querySelector('.slider-val[data-for=\'{{ key }}\']').textContent = this.value">
+  </div>
+{% endmacro %}
+
+{% macro txt_list(key, label, list_id) %}
+  <div class="form-group">
+    <label>{{ label }}</label>
+    <input type="text" name="{{ key }}" class="form-control" value="{{ values.get(key, '') }}"
+           list="{{ list_id }}" autocomplete="off">
+  </div>
+{% endmacro %}
+
+{% macro provider_select(key, label, model_key, exclude_key='', feature='classifier') %}
+  <div class="form-group">
+    <label>{{ label }}</label>
+    <select name="{{ key }}" class="form-control provider-select"
+            data-model-target="{{ model_key }}" data-current="{{ values.get(key, '') }}"
+            data-feature="{{ feature }}"
+            {% if exclude_key %}data-exclude-of="{{ exclude_key }}"{% endif %}>
+      <option value="">— Aucun —</option>
+    </select>
+  </div>
+{% endmacro %}
+
+{% macro model_select(key, label, provider_key, feature='classifier') %}
+  <div class="form-group">
+    <label>{{ label }}</label>
+    <select name="{{ key }}" class="form-control model-select"
+            data-model-for="{{ provider_key }}" data-current="{{ values.get(key, '') }}"
+            data-feature="{{ feature }}"
+            {{ 'disabled' if not values.get(provider_key) }}>
+      <option value="">{{ '— Choisir un provider d\'abord —' if not values.get(provider_key) else '— Aucun —' }}</option>
+    </select>
+  </div>
+{% endmacro %}
+
+{% macro chk(key, label) %}
+  <div class="form-group"><div class="form-check">
+    <input type="checkbox" name="{{ key }}" {{ 'checked' if values.get(key) }}>
+    <label>{{ label }}</label>
+  </div></div>
+{% endmacro %}
+
+{% macro sel(key, label, options) %}
+  <div class="form-group">
+    <label>{{ label }}</label>
+    <select name="{{ key }}" class="form-control">
+      {% for opt in options %}
+        <option value="{{ opt }}" {{ 'selected' if values.get(key) == opt }}>{{ opt or '—' }}</option>
+      {% endfor %}
+    </select>
+  </div>
+{% endmacro %}
+
+{% macro sel_kv(key, label, options) %}
+  <div class="form-group">
+    <label>{{ label }}</label>
+    <select name="{{ key }}" class="form-control">
+      {% for val, lbl in options %}
+        <option value="{{ val }}" {{ 'selected' if values.get(key) == val }}>{{ lbl }}</option>
+      {% endfor %}
+    </select>
+  </div>
+{% endmacro %}
+
+{% macro secret(key, label, present, hint='') %}
+  <div class="form-group">
+    <label>{{ label }}</label>
+    <input type="password" name="{{ key }}" class="form-control" placeholder="{{ '••••••••' if present else '' }}">
+    <div class="form-hint">{{ hint if hint else ('Une valeur est définie. Laissez vide pour la conserver.' if present else 'Aucune valeur définie.') }}</div>
+  </div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1>{{ 'Nouvelle configuration' if mode == 'create' else 'Éditer la configuration' }}</h1></div>
+</div>
+
+<form method="POST">
+  {{ form.hidden_tag() }}
+
+  <div class="card form-card" style="padding:0;">
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="general">Général</button>
+      <button type="button" class="tab" data-tab="ia">IA</button>
+      <button type="button" class="tab" data-tab="reco">Reconnaissance</button>
+      <button type="button" class="tab" data-tab="in">Entrées</button>
+      <button type="button" class="tab" data-tab="out">Sorties</button>
+    </div>
+
+    <div class="tab-body">
+      <!-- GÉNÉRAL -->
+      <div class="tab-panel active" data-panel="general">
+        <div class="form-group">
+          {{ form.config_name.label }} {{ form.config_name(class="form-control") }}
+          {% if form.config_name.errors %}<div class="form-errors">{{ form.config_name.errors[0] }}</div>{% endif %}
+        </div>
+        <div class="form-row">
+          <div class="form-group">{{ form.account_id.label }} {{ form.account_id(class="form-control", id="account-select") }}</div>
+          <div class="form-group">{{ form.doctype_id.label }} {{ form.doctype_id(class="form-control", id="doctype-select") }}</div>
+        </div>
+        <div class="form-group"><div class="form-check">{{ form.need_validation() }} {{ form.need_validation.label }}</div></div>
+        <div class="form-group"><div class="form-check">{{ form.multi_doc_detect() }} {{ form.multi_doc_detect.label }}</div></div>
+        {{ slider('auto_validation_threshold', 'Seuil de validation auto') }}
+        {{ chk('completeness_check', 'Contrôle de complétude') }}
+        {{ txt('filter_extensions', 'Extensions filtrées') }}
+        {{ num('fixed_page', 'Page fixe', mn=0) }}
+        {{ num('multi_doc_max_workers', 'Workers multi-doc', mn=1) }}
+        {{ num('pdf_max_pages', 'Pages PDF max', mn=0) }}
+      </div>
+
+      <!-- IA -->
+      <div class="tab-panel" data-panel="ia">
+        <div class="form-group" style="grid-column:1/-1; max-width:320px;">
+          <label>Région EdenAI</label>
+          <select id="region-select" name="region" class="form-control"
+                  data-current="{{ values.get('region', 'eu') }}">
+            <!-- peuplé en JS depuis les régions du catalogue -->
+          </select>
+          <div class="form-hint">Construit les endpoints (EU / global) et filtre les modèles disponibles.</div>
+        </div>
+        <div class="form-section-title">OCR</div>
+        {{ provider_select('ocr_provider', 'Provider OCR', '', '', 'ocr') }}
+        {{ sel_kv('ocr_language', 'Langue OCR', ocr_languages) }}
+        {{ chk('ocr_treat_images', 'Traiter les images') }}
+        {{ provider_select('fallback_ocr_provider', 'Provider OCR (fallback)', '', 'ocr_provider', 'ocr') }}
+        <div class="form-section-title">Classification</div>
+        {{ provider_select('classifier_provider', 'Provider', 'classifier_model', '', 'classifier') }}
+        {{ model_select('classifier_model', 'Modèle', 'classifier_provider', 'classifier') }}
+        {{ slider('classifier_confidence_level', 'Seuil de confiance') }}
+        {{ chk('classifier_let_it_guess', 'Laisser deviner') }}
+        {{ provider_select('fallback_classifier_provider', 'Provider (fallback)', 'fallback_classifier_model', 'classifier_provider', 'classifier') }}
+        {{ model_select('fallback_classifier_model', 'Modèle (fallback)', 'fallback_classifier_provider', 'classifier') }}
+        <div class="form-section-title">Extraction</div>
+        {{ provider_select('extract_provider', 'Provider', 'extract_model', '', 'extract') }}
+        {{ model_select('extract_model', 'Modèle', 'extract_provider', 'extract') }}
+        {{ provider_select('fallback_extract_provider', 'Provider (fallback)', 'fallback_extract_model', 'extract_provider', 'extract') }}
+        {{ model_select('fallback_extract_model', 'Modèle (fallback)', 'fallback_extract_provider', 'extract') }}
+        <div class="form-section-title">Clé EdenAI</div>
+        {{ secret('edenai_secret_key', 'Clé EdenAI', has_secret.get('edenai_secret_enc'),
+                  hint='Si vide, la clé EdenAI du compte sélectionné est utilisée par défaut.') }}
+        <div class="form-hint" id="edenai-account-hint" style="display:none; margin-top:-12px;">
+          ✓ Le compte sélectionné dispose d'une clé EdenAI (utilisée par défaut).
+        </div>
+      </div>
+
+      <!-- RECONNAISSANCE -->
+      <div class="tab-panel" data-panel="reco">
+        {{ txt_list('object_detection_provider', 'Détection d\'objets — provider', 'dl-od-providers') }}
+        {{ txt_list('fallback_object_detection_provider', 'Détection d\'objets — fallback', 'dl-od-providers') }}
+        {{ provider_select('vision_llm_provider', 'Vision LLM — provider', 'vision_llm_model') }}
+        {{ model_select('vision_llm_model', 'Vision LLM — modèle', 'vision_llm_provider') }}
+        {{ provider_select('fallback_vision_llm_provider', 'Vision LLM — provider (fallback)', 'fallback_vision_llm_model', 'vision_llm_provider') }}
+        {{ model_select('fallback_vision_llm_model', 'Vision LLM — modèle (fallback)', 'fallback_vision_llm_provider') }}
+      </div>
+
+      <!-- ENTRÉES -->
+      <div class="tab-panel" data-panel="in">
+        <div class="form-group">
+          <label>Mode d'entrée</label>
+          <select name="way_in" class="form-control way-select" data-side="in">
+            {% for w in way_in_choices %}
+              <option value="{{ w }}" {{ 'selected' if values.get('way_in') == w }}>{{ w }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="way-section" data-side="in" data-way="S3">
+          <div class="form-section-title">S3</div>
+          {{ txt('s3_bucket_in', 'Bucket') }}
+          {{ txt('s3_prefix_in', 'Préfixe') }}
+          {{ txt('aws_region_in', 'Région AWS') }}
+          {{ secret('aws_access_key_id_in', 'AWS Access Key ID', has_secret.get('aws_in_enc')) }}
+          {{ secret('aws_secret_access_key_in', 'AWS Secret Access Key', has_secret.get('aws_in_enc')) }}
+        </div>
+        <div class="way-section" data-side="in" data-way="FTP">
+          <div class="form-section-title">FTP</div>
+          {{ txt('ftp_server_in', 'Serveur') }}
+          {{ num('ftp_port_in', 'Port', mn=0) }}
+          {{ txt('ftp_user_in', 'Utilisateur') }}
+          {{ txt('ftp_remote_dir_in', 'Répertoire distant') }}
+          {{ secret('ftp_password_in', 'Mot de passe FTP', has_secret.get('ftp_in_enc')) }}
+        </div>
+      </div>
+
+      <!-- SORTIES (avec Export WS comme mode) -->
+      <div class="tab-panel" data-panel="out">
+        <div class="form-group">
+          <label>Mode de sortie</label>
+          <select name="way_out" class="form-control way-select" data-side="out">
+            {% for w in way_out_choices %}
+              <option value="{{ w }}" {{ 'selected' if values.get('way_out') == w }}>{{ 'Export WS' if w == 'WS' else w }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="way-section" data-side="out" data-way="S3">
+          <div class="form-section-title">S3</div>
+          {{ txt('s3_bucket_out', 'Bucket') }}
+          {{ txt('s3_prefix_out', 'Préfixe') }}
+          {{ txt('aws_region_out', 'Région AWS') }}
+          {{ secret('aws_access_key_id_out', 'AWS Access Key ID', has_secret.get('aws_out_enc')) }}
+          {{ secret('aws_secret_access_key_out', 'AWS Secret Access Key', has_secret.get('aws_out_enc')) }}
+        </div>
+        <div class="way-section" data-side="out" data-way="FTP">
+          <div class="form-section-title">FTP</div>
+          {{ txt('ftp_server_out', 'Serveur') }}
+          {{ num('ftp_port_out', 'Port', mn=0) }}
+          {{ txt('ftp_user_out', 'Utilisateur') }}
+          {{ txt('ftp_remote_dir_out', 'Répertoire distant') }}
+          {{ secret('ftp_password_out', 'Mot de passe FTP', has_secret.get('ftp_out_enc')) }}
+        </div>
+        <div class="way-section" data-side="out" data-way="WS">
+          <div class="form-section-title">Web service d'export</div>
+          <div class="form-hint" style="margin-bottom:16px;">
+            Les documents extraits et prêts sont envoyés vers ce service.
+          </div>
+          {{ txt('export_url', 'URL du web service') }}
+          {{ sel('export_auth_type', 'Type d\'authentification', auth_types) }}
+          {{ secret('export_auth_token', 'Bearer token', has_secret.get('flower_enc')) }}
+          {{ txt('export_auth_user', 'Utilisateur (Basic)') }}
+          {{ secret('export_auth_password', 'Mot de passe (Basic)', has_secret.get('flower_enc')) }}
+          {{ txt('export_api_key_header', 'Nom du header (API key)') }}
+          {{ secret('export_api_key_value', 'Valeur de la clé API', has_secret.get('flower_enc')) }}
+          <div class="form-section-title">Robustesse</div>
+          {{ num('export_timeout', 'Timeout (s)', mn=1) }}
+          {{ num('export_max_retries', 'Tentatives max', mn=0) }}
+          {{ num('export_retry_backoff', 'Backoff entre tentatives', mn=0, step='0.1') }}
+          {{ chk('export_verify_ssl', 'Vérifier le certificat SSL') }}
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions" style="padding:0 28px 28px;">
+      <button type="submit" class="btn btn-primary">Enregistrer</button>
+      <a href="{{ url_for('configs.list_configs') }}" class="btn btn-secondary">Annuler</a>
+    </div>
+  </div>
+</form>
+
+<datalist id="dl-ocr-providers">{% for p in ocr_providers %}<option value="{{ p }}">{% endfor %}</datalist>
+<datalist id="dl-llm-providers">{% for p in llm_providers %}<option value="{{ p }}">{% endfor %}</datalist>
+<datalist id="dl-llm-models">{% for m in llm_models %}<option value="{{ m }}">{% endfor %}</datalist>
+
+<datalist id="dl-od-providers">{% for p in object_detection_providers %}<option value="{{ p }}">{% endfor %}</datalist>
+
+<script>
+  // Onglets
+  document.querySelectorAll('.tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      var target = this.getAttribute('data-tab');
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelector('[data-panel="' + target + '"]').classList.add('active');
+    });
+  });
+
+  // Sections S3/FTP/WS selon le mode
+  function syncWaySections(side) {
+    var sel = document.querySelector('.way-select[data-side="' + side + '"]');
+    if (!sel) return;
+    var chosen = sel.value;
+    document.querySelectorAll('.way-section[data-side="' + side + '"]').forEach(function(sec) {
+      sec.style.display = (sec.getAttribute('data-way') === chosen) ? 'block' : 'none';
+    });
+  }
+  document.querySelectorAll('.way-select').forEach(function(sel) {
+    sel.addEventListener('change', function() { syncWaySections(this.getAttribute('data-side')); });
+  });
+  syncWaySections('in');
+  syncWaySections('out');
+
+  // Filtrage dynamique des doctypes selon le compte
+  var accountSel = document.getElementById('account-select');
+  var doctypeSel = document.getElementById('doctype-select');
+  // Catalogue AI par feature (providers + modèles avec régions) injecté par le backend.
+  var AI_CATALOG = {{ ai_catalog | tojson }};
+  var ALL_REGIONS = AI_CATALOG.regions || ['eu', 'global'];
+  var regionSelect = document.getElementById('region-select');
+
+  // Bloc {by_provider, regions} d'une feature donnée.
+  function featureBlock(feature) {
+    return AI_CATALOG[feature] || { by_provider: {}, regions: [] };
+  }
+  function providersOf(feature) {
+    return Object.keys(featureBlock(feature).by_provider || {}).sort();
+  }
+
+  function currentRegion() {
+    return regionSelect ? regionSelect.value : '';
+  }
+
+  // Modèles d'un provider pour une feature, filtrés par la région choisie.
+  function modelsFor(feature, provider) {
+    var entries = (featureBlock(feature).by_provider || {})[provider] || [];
+    var region = currentRegion();
+    return entries
+      .filter(function(e) {
+        if (!region) return true;
+        if (!e.regions || !e.regions.length) return true;
+        return e.regions.indexOf(region) !== -1;
+      })
+      .map(function(e) { return e.name; });
+  }
+
+  function fillProviderSelect(sel, keepInvalid) {
+    var feature = sel.getAttribute('data-feature') || 'classifier';
+    var current = sel.getAttribute('data-current') || '';
+    var excludeKey = sel.getAttribute('data-exclude-of');
+    var excluded = '';
+    if (excludeKey) {
+      var mainSel = document.querySelector('select.provider-select[name="' + excludeKey + '"]');
+      if (mainSel) excluded = mainSel.value;
+    }
+    var providers = providersOf(feature);
+    var stillValid = current && providers.indexOf(current) !== -1 && current !== excluded;
+    sel.innerHTML = '';
+    sel.add(new Option('— Aucun —', ''));
+    providers.forEach(function(p) {
+      if (p === excluded) return;
+      sel.add(new Option(p, p, false, p === current));
+    });
+    // Valeur enregistrée absente de la région courante : on ne la conserve QUE
+    // au chargement initial (keepInvalid) pour ne pas casser une config existante.
+    // Au changement de région, on vide (sélection repart de — Aucun —).
+    if (current && !stillValid) {
+      if (keepInvalid) {
+        sel.add(new Option(current + ' (actuel)', current, false, true));
+      } else {
+        sel.value = '';
+        sel.setAttribute('data-current', '');
+      }
+    }
+  }
+
+  function fillModelSelect(modelSel, keepInvalid) {
+    var feature = modelSel.getAttribute('data-feature') || 'classifier';
+    var providerKey = modelSel.getAttribute('data-model-for');
+    var current = modelSel.getAttribute('data-current') || '';
+    var providerSel = document.querySelector('[name="' + providerKey + '"]');
+    var provider = providerSel ? providerSel.value.trim() : '';
+    modelSel.innerHTML = '';
+    if (!provider) {
+      modelSel.disabled = true;
+      modelSel.add(new Option('— Choisir un provider d\'abord —', ''));
+      return;
+    }
+    modelSel.disabled = false;
+    modelSel.add(new Option('— Aucun —', ''));
+    var models = modelsFor(feature, provider);
+    models.forEach(function(m) { modelSel.add(new Option(m, m, false, m === current)); });
+    if (current && models.indexOf(current) === -1) {
+      if (keepInvalid) {
+        modelSel.add(new Option(current + ' (actuel)', current, false, true));
+      } else {
+        modelSel.value = '';
+        modelSel.setAttribute('data-current', '');
+      }
+    }
+  }
+
+  function enrichEdenai() {
+    if (regionSelect) {
+      var curRegion = regionSelect.getAttribute('data-current') || 'eu';
+      regionSelect.innerHTML = '';
+      regionSelect.add(new Option('Toutes les régions', ''));
+      ALL_REGIONS.forEach(function(r) {
+        regionSelect.add(new Option(r.toUpperCase(), r, false, r === curRegion));
+      });
+      regionSelect.addEventListener('change', function() {
+        // Changement de région : réinitialiser les sélections devenues invalides.
+        document.querySelectorAll('.provider-select').forEach(function(s) { fillProviderSelect(s, false); });
+        document.querySelectorAll('.model-select').forEach(function(m) { fillModelSelect(m, false); });
+      });
+    }
+    // Chargement initial : conserver les valeurs enregistrées (keepInvalid=true).
+    document.querySelectorAll('.provider-select').forEach(function(s) { fillProviderSelect(s, true); });
+    document.querySelectorAll('.model-select').forEach(function(m) { fillModelSelect(m, true); });
+  }
+
+  document.querySelectorAll('.provider-select').forEach(function(sel) {
+    sel.addEventListener('change', function() {
+      var modelSel = document.querySelector('.model-select[data-model-for="' + this.name + '"]');
+      if (modelSel) { modelSel.setAttribute('data-current', ''); fillModelSelect(modelSel); }
+      document.querySelectorAll('select.provider-select[data-exclude-of="' + this.name + '"]').forEach(function(fb) {
+        fb.setAttribute('data-current', fb.value);
+        fillProviderSelect(fb);
+        var fbModel = document.querySelector('.model-select[data-model-for="' + fb.name + '"]');
+        if (fbModel) { fbModel.setAttribute('data-current', ''); fillModelSelect(fbModel); }
+      });
+    });
+  });
+
+  enrichEdenai();
+
+  function onAccountChange(accId) {
+    // 1. Filtrer les doctypes selon le compte
+    if (doctypeSel) {
+      var current = doctypeSel.value;
+      fetch('{{ url_for("configs.doctypes_for_account") }}?account_id=' + encodeURIComponent(accId))
+        .then(r => r.json())
+        .then(res => {
+          doctypeSel.innerHTML = '<option value="">— Aucun —</option>';
+          (res.doctypes || []).forEach(function(d) {
+            doctypeSel.add(new Option(d.name, d.id, false, d.id === current));
+          });
+        }).catch(function() {});
+    }
+    // 2. Hint clé EdenAI du compte
+    fetch('{{ url_for("configs.account_edenai") }}?account_id=' + encodeURIComponent(accId))
+      .then(r => r.json())
+      .then(res => {
+        var hint = document.getElementById('edenai-account-hint');
+        if (hint) hint.style.display = res.has_account_key ? 'block' : 'none';
+      }).catch(function() {});
+  }
+
+  if (accountSel) {
+    accountSel.addEventListener('change', function() { onAccountChange(this.value); });
+    onAccountChange(accountSel.value);  // au chargement
+  }
+</script>
+{% endblock %}

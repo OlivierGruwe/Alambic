@@ -97,12 +97,37 @@ services:
     # donc on ne peut pas y lancer de script d'init. La cible Makefile pilote les
     # commandes avec 'docker compose exec garage /garage …'.
 
+  # ── Embeddings : serveur d'inférence local (souverain, CPU) ────────────────
+  # TEI (Hugging Face Text Embeddings Inference) sert BGE-M3 en local : aucune
+  # donnée ne sort de l'infra (contrairement à un embedding via API tierce).
+  # Image CPU (pas de GPU requis). Le modèle est mis en cache dans un volume
+  # pour éviter de le retélécharger à chaque recréation du conteneur.
+  # API exposée : /v1/embeddings (compatible OpenAI) et /embed (natif TEI).
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.6
+    command: ["--model-id", "${EMBEDDING_MODEL_ID:-BAAI/bge-m3}", "--port", "80"]
+    volumes:
+      - embeddings_cache:/data   # poids du modèle (téléchargés une seule fois)
+    ports:
+      - "${EMBEDDING_PORT:-8085}:80"   # exposé pour debug ; usage interne via le réseau
+    restart: unless-stopped
+    networks:
+      - alambic_net
+    healthcheck:
+      # TEI expose /health ; on attend qu'il réponde (chargement du modèle au 1er run).
+      test: ["CMD-SHELL", "curl -sf http://localhost:80/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 180s   # 1er démarrage : téléchargement + chargement du modèle
+
 volumes:
   postgres_data:
   rabbitmq_data:
   redis_data:
   garage_meta:
   garage_data:
+  embeddings_cache:
 
 networks:
   alambic_net:

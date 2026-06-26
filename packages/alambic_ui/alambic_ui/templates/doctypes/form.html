@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Nouveau doctype' if mode == 'create' else 'Éditer le doctype' }}{% endblock %}
+
+{% macro render_attr(spec, idx, value) %}
+  {% set key = spec[0] %}{% set label = spec[1] %}{% set widget = spec[3] %}{% set options = spec[4] %}
+  <div class="field-attr">
+    <label>{{ label }}</label>
+    {% if widget == 'checkbox' %}
+      <input type="checkbox" name="fields-{{ idx }}-{{ key }}" {{ 'checked' if value }}>
+    {% elif widget == 'select' %}
+      <select name="fields-{{ idx }}-{{ key }}" class="form-control">
+        {% for opt in options %}
+          <option value="{{ opt }}" {{ 'selected' if value == opt }}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    {% elif widget == 'textarea' %}
+      <textarea name="fields-{{ idx }}-{{ key }}" class="form-control" rows="2">{{ value }}</textarea>
+    {% else %}
+      <input type="text" name="fields-{{ idx }}-{{ key }}" class="form-control" value="{{ value }}">
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{% macro render_field(idx, field, field_spec) %}
+  <div class="field-card" data-field-index="{{ idx }}">
+    <div class="field-card-head">
+      <span class="field-card-title">{{ field.field_name or 'Nouveau champ' }}</span>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="removeField(this)">Supprimer</button>
+    </div>
+    <div class="field-essentials">
+      {% for spec in field_spec if spec[2] == 'essentiel' %}
+        {{ render_attr(spec, idx, field[spec[0]]) }}
+      {% endfor %}
+    </div>
+    <button type="button" class="field-toggle-advanced" onclick="toggleAdvanced(this)">
+      Options avancées
+    </button>
+    <div class="field-advanced" style="display:none;">
+      {% for spec in field_spec if spec[2] == 'avance' %}
+        {{ render_attr(spec, idx, field[spec[0]]) }}
+      {% endfor %}
+    </div>
+  </div>
+{% endmacro %}
+
+{% block content %}
+<div class="page-header">
+  <div><h1>{{ 'Nouveau doctype' if mode == 'create' else 'Éditer le doctype' }}</h1></div>
+</div>
+
+<form method="POST">
+  {{ form.hidden_tag() }}
+
+  <div class="card" style="padding:24px; margin-bottom:20px;">
+    <div class="form-section-title">Informations</div>
+    <div class="form-group">
+      {{ form.doctype_name.label }}
+      {{ form.doctype_name(class="form-control") }}
+      {% if form.doctype_name.errors %}<div class="form-errors">{{ form.doctype_name.errors[0] }}</div>{% endif %}
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <div class="form-check">{{ form.is_public() }} {{ form.is_public.label }}</div>
+      </div>
+      <div class="form-group" style="flex:2;">
+        {{ form.account_id.label }}
+        {{ form.account_id(class="form-control") }}
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:24px;">
+    <div class="form-section-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <span>Champs à extraire</span>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('gen-pdf-input').click()">
+          Générer depuis un PDF
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addField()">+ Ajouter un champ</button>
+      </div>
+    </div>
+    <input type="file" id="gen-pdf-input" accept="application/pdf" style="display:none" onchange="generateFromPdf(this)">
+    <div id="gen-status" class="gen-status" style="display:none;"></div>
+
+    <div id="fields-container">
+      {% for field in fields %}
+        {{ render_field(loop.index0, field, field_spec) }}
+      {% endfor %}
+    </div>
+    <div id="fields-empty" class="form-hint" style="{{ 'display:none;' if fields }}">
+      Aucun champ. Cliquez sur « Ajouter un champ » pour commencer.
+    </div>
+  </div>
+
+  <div class="form-actions" style="margin-top:20px;">
+    <button type="submit" class="btn btn-primary">Enregistrer</button>
+    <a href="{{ url_for('doctypes.list_doctypes') }}" class="btn btn-secondary">Annuler</a>
+  </div>
+</form>
+
+<template id="field-template">
+  {{ render_field('__IDX__', empty_field_dict, field_spec) }}
+</template>
+
+<script>
+  let fieldIndex = {{ fields|length }};
+
+  function addField() {
+    const tpl = document.getElementById('field-template').innerHTML;
+    const html = tpl.replace(/__IDX__/g, fieldIndex);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    document.getElementById('fields-container').appendChild(wrapper.firstElementChild);
+    document.getElementById('fields-empty').style.display = 'none';
+    fieldIndex++;
+  }
+
+  function removeField(btn) {
+    btn.closest('.field-card').remove();
+    if (document.querySelectorAll('.field-card').length === 0) {
+      document.getElementById('fields-empty').style.display = 'block';
+    }
+  }
+
+  function toggleAdvanced(btn) {
+    const adv = btn.nextElementSibling;
+    const open = adv.style.display !== 'none';
+    adv.style.display = open ? 'none' : 'block';
+    btn.classList.toggle('open', !open);
+  }
+
+  // Met à jour le titre de la carte quand on tape le nom du champ.
+  document.addEventListener('input', function(e) {
+    if (e.target.name && e.target.name.endsWith('-field_name')) {
+      const card = e.target.closest('.field-card');
+      const title = card.querySelector('.field-card-title');
+      title.textContent = e.target.value || 'Nouveau champ';
+    }
+  });
+
+  // Ajoute un champ pré-rempli (nom, type, description) depuis la génération.
+  function addFieldWithValues(vals) {
+    addField();
+    const cards = document.querySelectorAll('.field-card');
+    const card = cards[cards.length - 1];
+    const setVal = (key, value) => {
+      const el = card.querySelector('[name$="-' + key + '"]');
+      if (el) {
+        el.value = value;
+        if (key === 'field_name') {
+          card.querySelector('.field-card-title').textContent = value || 'Nouveau champ';
+        }
+      }
+    };
+    setVal('field_name', vals.field_name || '');
+    setVal('field_type', vals.field_type || 'string');
+    setVal('field_description', vals.field_description || '');
+  }
+
+  function generateFromPdf(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const status = document.getElementById('gen-status');
+    status.style.display = 'block';
+    status.className = 'gen-status gen-status-loading';
+    status.textContent = 'Analyse du PDF en cours…';
+
+    const data = new FormData();
+    data.append('pdf', file);
+    const accountSel = document.querySelector('[name="account_id"]');
+    if (accountSel) data.append('account_id', accountSel.value);
+    data.append('csrf_token', '{{ csrf_token() }}');
+
+    fetch('{{ url_for("doctypes.generate_fields") }}', { method: 'POST', body: data })
+      .then(r => r.json())
+      .then(res => {
+        if (res.error) {
+          status.className = 'gen-status gen-status-error';
+          status.textContent = res.error;
+        } else if (res.fields && res.fields.length) {
+          res.fields.forEach(addFieldWithValues);
+          document.getElementById('fields-empty').style.display = 'none';
+          status.className = 'gen-status gen-status-success';
+          status.textContent = res.fields.length + ' champ(s) généré(s) et ajouté(s). Vérifiez-les avant d\'enregistrer.';
+        } else {
+          status.className = 'gen-status gen-status-error';
+          status.textContent = 'Aucun champ généré.';
+        }
+      })
+      .catch(() => {
+        status.className = 'gen-status gen-status-error';
+        status.textContent = 'Erreur pendant la génération.';
+      });
+    input.value = '';  // permet de re-sélectionner le même fichier
+  }
+</script>
+{% endblock %}

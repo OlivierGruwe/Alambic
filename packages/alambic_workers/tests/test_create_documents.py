@@ -8,19 +8,18 @@ parent avec normalisation de l'id suffixé. SQLite en mémoire, sans Docker.
 
 from __future__ import annotations
 
+import alambic_core.models  # noqa: F401
 import pytest
+from alambic_core.db.base import Base
+from alambic_core.db.types import set_secret_provider
+from alambic_core.models import Account, Document, DocumentIndex, Transaction
+from alambic_core.repositories import DocumentIndexRepository
+from alambic_core.security.fernet_provider import FernetSecretProvider
 from cryptography.fernet import Fernet
 from sqlalchemy import create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
-
-from alambic_core.db.base import Base
-from alambic_core.db.types import set_secret_provider
-from alambic_core.security.fernet_provider import FernetSecretProvider
-import alambic_core.models  # noqa: F401
-from alambic_core.models import Account, Document, DocumentIndex, Transaction
-from alambic_core.repositories import DocumentIndexRepository
 
 from alambic_workers.tasks.create_documents import (
     _deprecate_parent,

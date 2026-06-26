@@ -9,7 +9,8 @@ dependencies = [
     # Résolu en local via le workspace (cf. [tool.uv.sources]). C'est lui qui
     # tire sqlalchemy, alembic, cryptography, psycopg…
     "alambic-core",
-
+    "alambic-workers",
+    "alambic-ui",
     # ── Orchestration / workers ──────────────────────────────────────────────
     "celery[redis]>=5.4,<6",
     "kombu>=5.4,<6",
@@ -58,7 +59,8 @@ members = ["packages/*"]
 [tool.uv.sources]
 # alambic-core est résolu depuis le workspace local, pas depuis PyPI.
 alambic-core = { workspace = true }
-
+alambic-workers = { workspace = true }
+alambic-ui = { workspace = true }
 # ═══════════════════════════════════════════════════════════════════════════════
 # Mode APPLICATION pour le projet racine (pas une lib distribuable).
 # ═══════════════════════════════════════════════════════════════════════════════

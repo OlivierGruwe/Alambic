@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Comptes{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Comptes</h1>
+    <div class="subtitle">{{ accounts|length }} compte{{ 's' if accounts|length != 1 }}</div>
+  </div>
+  <a href="{{ url_for('accounts.create_account') }}" class="btn btn-primary">Nouveau compte</a>
+</div>
+
+{% if accounts %}
+<div class="card">
+  <table class="responsive-table">
+    <thead>
+      <tr>
+        <th>Nom</th>
+        <th>Ville</th>
+        <th>Pays</th>
+        <th>État</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for acc in accounts %}
+      <tr>
+        <td data-label="Nom"><strong>{{ acc.account_name }}</strong></td>
+        <td data-label="Ville">{{ acc.town or "—" }}</td>
+        <td data-label="Pays">{{ acc.country or "—" }}</td>
+        <td data-label="État">
+          {% if acc.active %}
+            <span class="badge badge-active">Actif</span>
+          {% else %}
+            <span class="badge badge-inactive">Inactif</span>
+          {% endif %}
+        </td>
+        <td data-label="Actions">
+          <div class="row-actions">
+            <a href="{{ url_for('accounts.edit_account', account_id=acc.id) }}"
+               class="btn btn-secondary btn-sm">Éditer</a>
+            <form method="POST" action="{{ url_for('accounts.toggle_account', account_id=acc.id) }}"
+                  style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-ghost btn-sm">
+                {{ 'Désactiver' if acc.active else 'Activer' }}
+              </button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card">
+  <div class="empty">
+    <h3>Aucun compte</h3>
+    <p>Créez le premier compte client pour commencer.</p>
+    <a href="{{ url_for('accounts.create_account') }}" class="btn btn-primary">Nouveau compte</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

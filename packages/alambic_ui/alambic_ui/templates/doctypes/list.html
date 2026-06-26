@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Doctypes{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Doctypes</h1>
+    <div class="subtitle">{{ doctypes|length }} type{{ 's' if doctypes|length != 1 }} de document</div>
+  </div>
+  <a href="{{ url_for('doctypes.create_doctype') }}" class="btn btn-primary">Nouveau doctype</a>
+</div>
+
+{% if doctypes %}
+<div class="card">
+  <table class="responsive-table">
+    <thead>
+      <tr><th>Nom</th><th>Portée</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for dt in doctypes %}
+      <tr>
+        <td data-label="Nom"><strong>{{ dt.doctype_name }}</strong></td>
+        <td data-label="Portée">
+          {% if dt.is_public %}
+            <span class="badge badge-active">Public</span>
+          {% else %}
+            <span class="badge badge-inactive">Compte</span>
+          {% endif %}
+        </td>
+        <td data-label="Actions">
+          <div class="row-actions">
+            <a href="{{ url_for('doctypes.edit_doctype', doctype_id=dt.id) }}" class="btn btn-secondary btn-sm">Éditer</a>
+            <form method="POST" action="{{ url_for('doctypes.delete_doctype', doctype_id=dt.id) }}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Supprimer le doctype {{ dt.doctype_name }} ?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-ghost btn-sm">Supprimer</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card"><div class="empty">
+  <h3>Aucun doctype</h3>
+  <p>Créez un type de document pour définir les champs à extraire.</p>
+  <a href="{{ url_for('doctypes.create_doctype') }}" class="btn btn-primary">Nouveau doctype</a>
+</div></div>
+{% endif %}
+{% endblock %}

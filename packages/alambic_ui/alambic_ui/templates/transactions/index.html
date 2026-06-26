@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Transactions{% endblock %}
+
+{% block head %}
+<style>
+  .tx-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  .tx-upload-panel { display:none; margin-bottom:20px; }
+  .tx-upload-panel.open { display:block; }
+
+  .tx-table { width:100%; border-collapse:collapse; font-size:14px; background:#fff;
+    border:1px solid var(--slate-200); border-radius:var(--radius-lg); overflow:hidden; }
+  .tx-table th { text-align:left; padding:11px 14px; font-size:12px; text-transform:uppercase;
+    letter-spacing:.03em; color:var(--slate-500); border-bottom:1px solid var(--slate-100);
+    background:var(--slate-50); }
+  .tx-table td { padding:11px 14px; border-bottom:1px solid var(--slate-50); }
+  .tx-row { cursor:pointer; }
+  .tx-row:hover { background:var(--slate-50); }
+  .tx-caret { display:inline-block; width:14px; transition:transform .15s; color:var(--slate-400); }
+  .tx-row.expanded .tx-caret { transform:rotate(90deg); }
+  .mono { font-variant-numeric:tabular-nums; font-family:ui-monospace,monospace; font-size:13px; }
+
+  .st { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; font-size:12px;
+    font-weight:500; border-radius:999px; }
+  .st::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .st-validated,.st-exported { background:var(--success-50); color:var(--success-600); }
+  .st-working,.st-created,.st-processing { background:var(--warning-50); color:var(--warning-600); }
+  .st-failed { background:#fde8e8; color:#c0392b; }
+  .st-other { background:var(--slate-100); color:var(--slate-500); }
+
+  .tx-docs-row td { padding:0; background:var(--slate-50); }
+  .tx-docs-wrap { padding:6px 14px 14px 40px; }
+  .doc-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff;
+    border:1px solid var(--slate-200); border-radius:var(--radius); overflow:hidden; }
+  .doc-table th { text-align:left; padding:8px 12px; font-size:11px; text-transform:uppercase;
+    color:var(--slate-400); border-bottom:1px solid var(--slate-100); }
+  .doc-table td { padding:8px 12px; border-bottom:1px solid var(--slate-50); }
+  .doc-badge { padding:2px 8px; font-size:11px; border-radius:999px; }
+  .doc-badge-validated,.doc-badge-exported { background:var(--success-50); color:var(--success-600); }
+  .doc-badge-failed { background:#fde8e8; color:#c0392b; }
+  .doc-badge-data_extracted_ai,.doc-badge-ocr_done,.doc-badge-created { background:var(--warning-50); color:var(--warning-600); }
+  .doc-empty,.doc-error { padding:14px; color:var(--slate-400); font-size:13px; }
+  .doc-loading { padding:14px; color:var(--slate-400); font-size:13px; }
+
+  .tx-actions { white-space:nowrap; }
+  .act-btn { border:none; background:none; cursor:pointer; font-size:15px; padding:4px 6px;
+    border-radius:6px; line-height:1; }
+  .act-btn:hover { background:var(--slate-100); }
+  .act-retry { color:var(--warning-600); }
+  .act-delete { color:#c0392b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Transactions</h1>
+    <div class="subtitle">Suivi des traitements et de leurs documents.</div>
+  </div>
+</div>
+
+<div class="tx-toolbar">
+  <div></div>
+  {% if configs %}
+  <button class="btn btn-primary" onclick="document.getElementById('upload-panel').classList.toggle('open')">
+    + Déclencher un traitement
+  </button>
+  {% endif %}
+</div>
+
+{% if configs %}
+<div class="card form-card tx-upload-panel" id="upload-panel" style="padding:24px;">
+  <form method="POST" action="{{ url_for('transactions.upload') }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+      <label>Configuration</label>
+      <select name="config_id" class="form-control" required>
+        <option value="">— Choisir une configuration —</option>
+        {% for c in configs %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Documents</label>
+      <input type="file" name="files" class="form-control" multiple required>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Déposer et lancer le traitement</button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if transactions %}
+<table class="tx-table">
+  <thead>
+    <tr>
+      <th></th><th>ID</th><th>Date</th><th>Compte</th><th>Config</th>
+      <th>État</th><th>Process</th><th>Documents</th><th>Coût</th><th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for tx in transactions %}
+    <tr class="tx-row" data-tx="{{ tx.id }}" onclick="toggleDocs('{{ tx.id }}')">
+      <td><span class="tx-caret">▶</span></td>
+      <td class="mono">{{ tx.id }}</td>
+      <td>{{ tx.created_at.strftime("%d/%m/%Y %H:%M") if tx.created_at else "—" }}</td>
+      <td>{{ tx.account }}</td>
+      <td>{{ tx.config }}</td>
+      <td><span class="st st-{{ tx.status|lower }}" data-st-for="{{ tx.id }}">{{ tx.status }}</span></td>
+      <td>{{ tx.process or "—" }}</td>
+      <td class="mono" data-docs-for="{{ tx.id }}">{{ tx.nb_docs }}</td>
+      <td class="mono">{{ "%.3f €"|format(tx.cost) if tx.cost is not none else "—" }}</td>
+      <td class="tx-actions" onclick="event.stopPropagation()">
+        {% if tx.is_stuck %}
+        <form method="POST" action="{{ url_for('transactions.retry', tx_id=tx.id) }}" style="display:inline;"
+              onsubmit="return confirm('Relancer cette transaction bloquée ?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="act-btn act-retry" title="Relancer (bloquée depuis >10 min)">↻</button>
+        </form>
+        {% endif %}
+        {% if not tx.is_working %}
+        <form method="POST" action="{{ url_for('transactions.delete', tx_id=tx.id) }}" style="display:inline;"
+              onsubmit="return confirm('Supprimer définitivement cette transaction et ses fichiers ?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="act-btn act-delete" title="Supprimer">🗑</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    <tr class="tx-docs-row" id="docs-{{ tx.id }}" style="display:none;">
+      <td colspan="10"><div class="tx-docs-wrap" id="docs-wrap-{{ tx.id }}"></div></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card"><div class="empty">
+  <h3>Aucune transaction</h3>
+  <p>Déclenchez un traitement en déposant des documents.</p>
+</div></div>
+{% endif %}
+
+<script>
+const loadedDocs = new Set();
+
+function toggleDocs(txId) {
+  const row = document.querySelector(`.tx-row[data-tx="${txId}"]`);
+  const docsRow = document.getElementById(`docs-${txId}`);
+  const isOpen = docsRow.style.display !== "none";
+  if (isOpen) {
+    docsRow.style.display = "none";
+    row.classList.remove("expanded");
+    return;
+  }
+  docsRow.style.display = "";
+  row.classList.add("expanded");
+  // Lazy : charger les documents au premier dépliage seulement.
+  if (!loadedDocs.has(txId)) {
+    const wrap = document.getElementById(`docs-wrap-${txId}`);
+    wrap.innerHTML = '<div class="doc-loading">Chargement…</div>';
+    fetch(`{{ url_for('transactions.index') }}${txId}/documents`)
+      .then(r => r.text())
+      .then(html => { wrap.innerHTML = html; loadedDocs.add(txId); })
+      .catch(() => { wrap.innerHTML = '<div class="doc-error">Erreur de chargement.</div>'; });
+  }
+}
+
+// Polling des statuts toutes les 5 s (met à jour les lignes en cours).
+const TERMINAL = new Set(["VALIDATED", "EXPORTED", "FAILED"]);
+function refreshStatuses() {
+  fetch(`{{ url_for('transactions.statuses') }}`)
+    .then(r => r.json())
+    .then(data => {
+      for (const [txId, info] of Object.entries(data)) {
+        const stEl = document.querySelector(`[data-st-for="${txId}"]`);
+        const docsEl = document.querySelector(`[data-docs-for="${txId}"]`);
+        if (stEl && stEl.textContent.trim() !== info.status) {
+          stEl.textContent = info.status;
+          stEl.className = `st st-${info.status.toLowerCase()}`;
+        }
+        if (docsEl) docsEl.textContent = info.nb_docs;
+      }
+    })
+    .catch(() => {});
+}
+setInterval(refreshStatuses, 5000);
+</script>
+{% endblock %}

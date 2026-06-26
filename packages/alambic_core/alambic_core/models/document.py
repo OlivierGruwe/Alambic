@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,6 +31,21 @@ class Document(Base, TimestampMixin, AuditMixin):
     process_state: Mapped[str] = mapped_column(
         String(20), nullable=False, default=DocumentProcessState.STARTED.value
     )
+    # Horodatage de la dernière étape franchie par CE document (suivi fin : les
+    # documents avancent à leur propre rythme).
+    process_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # ── Filiation (généalogie des documents) ────────────────────────────────
+    # parent_id : document d'origine qui a produit celui-ci (null = racine,
+    # déposé directement). Un .eml extrait produit des enfants pointant vers lui ;
+    # le parent passe alors en statut DEPRECATED (remplacé par ses enfants).
+    parent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # discard_reason : renseigné UNIQUEMENT pour les documents DISCARDED (écartés
+    # car inexploitables : vidéo, format non géré, corrompu). Les DEPRECATED n'en
+    # ont pas (la dépréciation est normale dans le process).
+    discard_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     # Stockage objet (MinIO)
     bucket_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
@@ -41,6 +58,17 @@ class Document(Base, TimestampMixin, AuditMixin):
     # Résumé d'extraction : vraiment schemaless → jsonb justifié
     extraction_summary: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
+    # Codes-barres lus (readCAB) : liste de {value, page, format, position}.
+    # Stockés en base (pas en fichier S3) : lus avec le document, sans I/O réseau,
+    # et disponibles pour le découpage (brique F).
+    barcodes: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
+    # Résultat OCR (moteur hybride) : le markdown sert à la classification,
+    # ocr_lines porte les lignes positionnées (texte b64 + position %) pour
+    # l'extraction de champs et le découpage.
+    ocr_markdown: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    ocr_lines: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+
     # FK réelles
     transaction_id: Mapped[str] = mapped_column(
         ForeignKey("transactions.id", ondelete="CASCADE"), nullable=False, index=True
@@ -51,6 +79,10 @@ class Document(Base, TimestampMixin, AuditMixin):
 
     # Relations
     transaction: Mapped["Transaction"] = relationship(back_populates="documents")
+    parent: Mapped["Document | None"] = relationship(
+        "Document", remote_side=[id], back_populates="children"
+    )
+    children: Mapped[list["Document"]] = relationship("Document", back_populates="parent")
     indexes: Mapped[list["DocumentIndex"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", lazy="selectin"
     )

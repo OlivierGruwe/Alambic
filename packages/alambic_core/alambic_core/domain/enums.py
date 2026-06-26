@@ -20,9 +20,19 @@ class DocumentStatus(str, Enum):
     FILE_SPLIT = "FILE_SPLIT"
     DATA_EXTRACTED_CONVENTIONAL = "DATA_EXTRACTED_CONVENTIONAL"
     DATA_EXTRACTED_AI = "DATA_EXTRACTED_AI"
+    # En attente de validation humaine (index extraits, contrôle par un opérateur
+    # avant export). Renseigné en fin d'extraction ; quitté quand l'humain valide.
+    PENDING_VALIDATION = "PENDING_VALIDATION"
     VALIDATED = "VALIDATED"
     EXPORTED = "EXPORTED"
     FAILED = "FAILED"
+    # Remplacé par ses enfants (eml extrait, pdf splitté). Normal dans le
+    # process, sans raison à stocker. Exclu du calcul de complétude.
+    DEPRECATED = "DEPRECATED"
+    # Écarté car inexploitable (vidéo, format non géré, corrompu). Avec une
+    # raison (discard_reason). Non rejoué. Exclu de la complétude, mais l'info
+    # remonte à la transaction (message + compteur nb_discarded).
+    DISCARDED = "DISCARDED"
 
 
 class DocumentProcess(str, Enum):
@@ -73,3 +83,19 @@ class IndexType(str, Enum):
 
     METADATA = "metadata"
     EXTRACTED = "extracted"
+
+
+class UserRole(str, Enum):
+    """Rôle d'un utilisateur de la plateforme.
+
+    - SUPER_ADMIN : accès total, transverse à tous les comptes.
+    - ADMIN       : gère son compte (configs, doctypes, utilisateurs).
+    - VALIDATOR   : valide les documents de son compte (accès restreint).
+
+    Valeurs string explicites : stables en base et lisibles, pour pouvoir
+    basculer vers un fournisseur d'identité externe (Keycloak) sans réécrire.
+    """
+
+    SUPER_ADMIN = "SUPER_ADMIN"
+    ADMIN = "ADMIN"
+    VALIDATOR = "VALIDATOR"

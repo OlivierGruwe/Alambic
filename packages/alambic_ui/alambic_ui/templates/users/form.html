@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Inviter un utilisateur' if mode == 'create' else 'Éditer l\'utilisateur' }}{% endblock %}
+{% block content %}
+<div class="page-header"><div>
+  <h1>{{ 'Inviter un utilisateur' if mode == 'create' else 'Éditer l\'utilisateur' }}</h1>
+</div></div>
+
+<div class="card form-card" style="padding: 28px;">
+  <form method="POST">
+    {{ form.hidden_tag() }}
+    <div class="form-group">
+      {{ form.email.label }} {{ form.email(class="form-control") }}
+      {% if form.email.errors %}<div class="form-errors">{{ form.email.errors[0] }}</div>{% endif %}
+    </div>
+    <div class="form-group">{{ form.full_name.label }} {{ form.full_name(class="form-control") }}</div>
+    <div class="form-row">
+      <div class="form-group">{{ form.role.label }} {{ form.role(class="form-control") }}</div>
+      <div class="form-group">{{ form.account_id.label }} {{ form.account_id(class="form-control") }}</div>
+    </div>
+    <div class="form-group"><div class="form-check">{{ form.active() }} {{ form.active.label }}</div></div>
+
+    {% if mode == 'edit' and pending_invite %}
+    <div class="form-hint" style="margin-bottom:16px;">
+      Cet utilisateur a une invitation en attente.
+    </div>
+    {% endif %}
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{ 'Créer et générer l\'invitation' if mode == 'create' else 'Enregistrer' }}</button>
+      <a href="{{ url_for('users.list_users') }}" class="btn btn-secondary">Annuler</a>
+      {% if mode == 'edit' %}
+      <form method="POST" action="{{ url_for('users.reinvite_user', user_id=user_id) }}" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-ghost">Régénérer l'invitation</button>
+      </form>
+      {% endif %}
+    </div>
+  </form>
+</div>
+{% endblock %}

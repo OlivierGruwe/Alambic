@@ -19,9 +19,24 @@ SHELL := bash
 PROJECT      := alambic
 STACK        := alambic
 COMPOSE_FILE := docker-compose.yml
+OBS_FILE := docker-compose.observability.yml
+APP_FILE := docker-compose.app.yml
+# Pour les cibles Docker : .env (secrets + local) PUIS ..env.docker (surcharge les
+# hôtes vers les noms de services Docker). L'ordre compte : le second l'emporte.
+APP_ENV := --env-file .env --env-file .env.docker
 SWARM_FILE   := docker-stack.yml
 ENV_FILE     := .env
 CORE_DIR     := packages/alambic_core
+WORKERS_DIR  := packages/alambic_workers
+
+# ── Chargement du .env dans les recettes locales ───────────────────────────────
+# Les recettes hors Docker (worker, poller, ui…) ont besoin des variables du
+# .env pointant sur localhost (CELERY_BROKER, ALAMBIC_DATABASE_URL, clés Garage).
+# On NE fait PAS `include .env` : make couperait toute valeur contenant un '#'
+# (possible dans un secret Garage). À la place, chaque recette concernée fait
+# précéder sa commande de $(LOAD_ENV), qui source le .env dans bash (lequel gère
+# correctement les '#' et caractères spéciaux).
+LOAD_ENV = if [ -f $(ENV_FILE) ]; then set -a; . ./$(ENV_FILE); set +a; fi;
 
 # uv : on appelle tout via `uv run` → pas besoin d'activer .venv,
 # transparent entre Windows (.venv/Scripts) et Unix (.venv/bin).
@@ -148,7 +163,7 @@ db-revision: ## Crée une migration Alembic (make db-revision M="message")
 
 .PHONY: db-upgrade
 db-upgrade: ## Applique les migrations (schéma à jour)
-	cd $(CORE_DIR) && $(RUN) alembic upgrade head
+	@$(LOAD_ENV) cd $(CORE_DIR) && $(RUN) alembic upgrade head
 
 .PHONY: db-downgrade
 db-downgrade: ## Annule la dernière migration
@@ -166,9 +181,42 @@ up: ## Démarre la stack en local (docker compose up -d)
 	$(COMPOSE) -f $(COMPOSE_FILE) up -d
 	@printf "$(C_GREEN)Stack démarrée.$(C_OFF) 'make ps' pour l'état, 'make logs' pour les logs.\n"
 
+.PHONY: up-all
+up-all: ## Démarre TOUT en Docker : infra + workers + poller + beat + UI
+	$(COMPOSE) $(APP_ENV) -f $(COMPOSE_FILE) -f $(APP_FILE) up -d --build
+	@printf "$(C_GREEN)Stack complète démarrée.$(C_OFF)\n"
+	@printf "  UI           : http://localhost:$${UI_PORT:-5000}\n"
+	@printf "  Effectifs réglables dans .env (OCR_REPLICAS, OFFICE_REPLICAS…).\n"
+
+.PHONY: down-all
+down-all: ## Arrête toute la stack applicative + infra
+	$(COMPOSE) $(APP_ENV) -f $(COMPOSE_FILE) -f $(APP_FILE) down
+
+.PHONY: build-app
+build-app: ## (Re)construit les images applicatives (base + office)
+	$(COMPOSE) $(APP_ENV) -f $(COMPOSE_FILE) -f $(APP_FILE) build
+
+.PHONY: scale
+scale: ## Règle l'effectif d'un worker (ex: make scale SVC=ocr-worker N=4)
+	@test -n "$(SVC)" || { printf "$(C_RED)Précise SVC=… (ex: ocr-worker)$(C_OFF)\n"; exit 1; }
+	@test -n "$(N)"   || { printf "$(C_RED)Précise N=…$(C_OFF)\n"; exit 1; }
+	$(COMPOSE) $(APP_ENV) -f $(COMPOSE_FILE) -f $(APP_FILE) up -d --scale $(SVC)=$(N) $(SVC)
+
 .PHONY: down
 down: ## Arrête la stack locale
 	$(COMPOSE) -f $(COMPOSE_FILE) down
+
+.PHONY: obs-up
+obs-up: ## Démarre les outils d'observabilité (Garage WebUI + Adminer)
+	$(COMPOSE) -f $(COMPOSE_FILE) -f $(OBS_FILE) up -d garage-webui adminer
+	@printf "$(C_GREEN)Observabilité démarrée.$(C_OFF)\\n"
+	@printf "  Garage WebUI : http://localhost:3909\\n"
+	@printf "  Adminer      : http://localhost:8080  (serveur: postgres)\\n"
+
+.PHONY: obs-down
+obs-down: ## Arrête les outils d'observabilité
+	$(COMPOSE) -f $(COMPOSE_FILE) -f $(OBS_FILE) stop garage-webui adminer
+	$(COMPOSE) -f $(COMPOSE_FILE) -f $(OBS_FILE) rm -f garage-webui adminer
 
 .PHONY: build
 build: ## (Re)construit les images locales
@@ -227,16 +275,24 @@ garage-keys: ## Affiche les identifiants S3 de la clé applicative (à mettre da
 
 # ── Workers Celery (dev) ───────────────────────────────────────────────────────
 .PHONY: worker
-worker: ## Lance un worker Celery en local (hors docker) sur la queue Q (def: normal)
-	$(RUN) celery -A core.celery_app:app worker -Q $(or $(Q),normal) --loglevel=INFO
+worker: ## Lance un worker Celery local (queue Q=normal, POOL=solo sur Windows)
+	@$(LOAD_ENV) $(RUN) celery -A alambic_workers.celery_app:app worker -Q $(or $(Q),normal) --pool=$(or $(POOL),solo) -n $(or $(Q),normal)@%h --loglevel=INFO
+
+.PHONY: poller
+poller: ## Lance le déclencheur : scrute __uploads__ dans Garage et lance le pipeline
+	@$(LOAD_ENV) $(RUN) python -m alambic_workers.trigger.poller $(if $(ONCE),--once,) $(if $(INTERVAL),--interval $(INTERVAL),)
+
+.PHONY: ui
+ui: ## Lance la webapp d'administration (Flask) sur http://127.0.0.1:5000
+	@$(LOAD_ENV) $(RUN) python -m alambic_ui
 
 .PHONY: beat
 beat: ## Lance Celery Beat en local (les crons : billing, sweep, export…)
-	$(RUN) celery -A core.celery_app:app beat --loglevel=INFO
+	@$(LOAD_ENV) $(RUN) celery -A alambic_workers.celery_app:app beat --loglevel=INFO
 
 .PHONY: flower
 flower: ## Monitoring Celery (Flower) sur http://localhost:5555
-	$(RUN) celery -A core.celery_app:app flower
+	@$(LOAD_ENV) $(RUN) celery -A alambic_workers.celery_app:app flower
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PRODUCTION — Docker Swarm
@@ -279,9 +335,44 @@ clean-all: clean ## clean + supprime .venv (réinstall via 'make install')
 	@rm -rf .venv
 	@printf "$(C_GREEN).venv supprimé.$(C_OFF)\n"
 
-workers-test:
-	uv run pytest packages/alambic_workers/tests/ -v
+# ═══════════════════════════════════════════════════════════════════════════════
+# ALAMBIC_WORKERS — le package Celery (tâches, orchestration, seed)
+# ═══════════════════════════════════════════════════════════════════════════════
+.PHONY: workers-test
+workers-test: ## Tests unitaires du package alambic_workers uniquement
+	@$(RUN) pytest $(WORKERS_DIR)/tests -q -m "not integration" || test $$? -eq 5
 
-workers-fmt:
-	uv run ruff check --fix packages/alambic_workers/
-	uv run ruff format packages/alambic_workers/
+.PHONY: workers-test-integration
+workers-test-integration: ## Tests d'intégration des workers (Postgres + Garage réels)
+	@$(RUN) pytest $(WORKERS_DIR)/tests -q -m integration || test $$? -eq 5
+
+.PHONY: workers-lint
+workers-lint: ## Lint + format du package alambic_workers
+	$(RUN) ruff check --fix $(WORKERS_DIR)
+	$(RUN) ruff format $(WORKERS_DIR)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DÉPLOIEMENT — initialisation d'une instance neuve
+# ═══════════════════════════════════════════════════════════════════════════════
+# Séquence d'un déploiement vierge : up → garage-init → migrate → bootstrap → seed.
+# 'make init' enchaîne les 3 dernières étapes (schéma + super-admin + données).
+
+.PHONY: bootstrap
+bootstrap: ## Crée le premier super-admin (interactif, idempotent)
+	@$(LOAD_ENV) $(RUN) python -m alambic_core.bootstrap
+
+.PHONY: seed
+seed: ## Charge les données de référence (accounts + doctypes)
+	@$(LOAD_ENV) $(RUN) python -m alambic_workers.seed.load_reference
+
+.PHONY: init
+init: db-upgrade bootstrap seed ## Déploiement neuf : schéma + super-admin + données de référence
+	@printf "$(C_GREEN)✓ Initialisation terminée.$(C_OFF) L'instance est prête.\n"
+
+.PHONY: db-reset
+db-reset: ## ⚠ DESTRUCTIF — vide le schéma SQL puis ré-applique la migration initiale
+	@printf "$(C_RED)⚠ Cette opération SUPPRIME toutes les données.$(C_OFF)\n"
+	@printf "Continuer ? [y/N] " && read ans && [ "$$ans" = "y" ] || { printf "Annulé.\n"; exit 1; }
+	$(RUN) python -c "from alambic_core.db.session import init_core, get_engine; from sqlalchemy import text; init_core(); c=get_engine().connect(); c.execute(text('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')); c.commit(); print('schema vidé')"
+	@$(LOAD_ENV) cd $(CORE_DIR) && $(RUN) alembic upgrade head
+	@printf "$(C_GREEN)Base réinitialisée.$(C_OFF) 'make bootstrap' puis 'make seed' pour repeupler.\n"

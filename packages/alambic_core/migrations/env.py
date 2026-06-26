@@ -23,9 +23,9 @@ from alambic_core.security.fernet_provider import NullSecretProvider
 set_secret_provider(NullSecretProvider())
 
 # 2) Settings + métadonnées des modèles
-import alambic_core.models  # noqa: E402,F401 — enregistre les 8 modèles sur Base.metadata
-from alambic_core.db.base import Base  # noqa: E402
 from alambic_core.db.config import CoreSettings  # noqa: E402
+from alambic_core.db.base import Base  # noqa: E402
+import alambic_core.models  # noqa: E402,F401 — enregistre les 8 modèles sur Base.metadata
 
 config = context.config
 if config.config_file_name is not None:

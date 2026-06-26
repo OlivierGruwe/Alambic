@@ -1,0 +1,76 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Alambic — outils d'observabilité (développement / debug).
+# - garage-webui : explorateur web du stockage Garage (buckets, objets, clés).
+# - adminer      : interface web pour PostgreSQL (tables, requêtes).
+#
+# Ces outils sont SÉPARÉS de l'infra principale (docker-compose.yml) : on les
+# lance à la demande, on ne les déploie pas en production.
+#
+# Démarrage (avec l'infra principale déjà up) :
+#   docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+#
+# Accès :
+#   - Garage WebUI : http://localhost:3909
+#   - Adminer      : http://localhost:8080
+#
+# Sécurité : ces interfaces donnent un accès large aux données. À n'exposer que
+# localement (dev). En aucun cas sur un réseau public sans authentification forte
+# et reverse-proxy TLS.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: alambic
+
+services:
+  # ── Garage WebUI : explorateur du stockage objet ───────────────────────────
+  # khairul169/garage-webui — UI dédiée à Garage (pas un client S3 générique).
+  # Elle lit le garage.toml monté pour récupérer l'admin_token et parle à l'API
+  # admin de Garage (port 3903). De là, elle liste buckets/objets et permet de
+  # parcourir/télécharger.
+  garage-webui:
+    image: khairul169/garage-webui:1.1.0
+    container_name: alambic-garage-webui
+    restart: unless-stopped
+    volumes:
+      # Même garage.toml que le service garage : la WebUI y lit l'admin_token,
+      # le s3_region, etc. Lecture seule.
+      - ./garage.toml:/etc/garage.toml:ro
+    environment:
+      # Endpoints internes (réseau Docker) vers le service garage.
+      API_BASE_URL: "http://garage:3903"      # API admin
+      S3_ENDPOINT_URL: "http://garage:3900"   # API S3 (parcours d'objets)
+      S3_REGION: "garage"
+      # Authentification de la WebUI elle-même (recommandé même en dev).
+      # Format : "user:bcrypt_hash". Générer le hash avec :
+      #   htpasswd -bnBC 10 "" 'votre_mot_de_passe' | tr -d ':\n' | sed 's/$2y/$2a/'
+      # Décommenter et renseigner pour activer :
+      # AUTH_USER_PASS: "admin:$2a$10$xxxxxxxxxxxxxxxxxxxxxx"
+    ports:
+      - "${GARAGE_WEBUI_PORT:-3909}:3909"
+    depends_on:
+      - garage
+    networks:
+      - alambic_net
+
+  # ── Adminer : interface web PostgreSQL ─────────────────────────────────────
+  # Image officielle légère. Se connecte au service postgres existant.
+  adminer:
+    image: adminer:4-standalone
+    container_name: alambic-adminer
+    restart: unless-stopped
+    environment:
+      # Pré-remplit le serveur dans le formulaire de connexion (= service compose).
+      ADMINER_DEFAULT_SERVER: postgres
+      # Thème lisible par défaut.
+      ADMINER_DESIGN: dracula
+    ports:
+      - "${ADMINER_PORT:-8080}:8080"
+    depends_on:
+      - postgres
+    networks:
+      - alambic_net
+
+# Réutilise le réseau défini dans docker-compose.yml (déclaré external ici pour
+# que ce fichier puisse être combiné via -f sans redéfinir le réseau).
+networks:
+  alambic_net:
+    external: false

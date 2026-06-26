@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Utilisateurs{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Utilisateurs</h1>
+    <div class="subtitle">{{ users|length }} utilisateur{{ 's' if users|length != 1 }}</div>
+  </div>
+  <a href="{{ url_for('users.create_user') }}" class="btn btn-primary">Inviter un utilisateur</a>
+</div>
+
+{% if users %}
+<div class="card">
+  <table class="responsive-table">
+    <thead>
+      <tr><th>Email</th><th>Nom</th><th>Rôle</th><th>État</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td data-label="Email"><strong>{{ u.email }}</strong></td>
+        <td data-label="Nom">{{ u.full_name or "—" }}</td>
+        <td data-label="Rôle">
+          <span class="role-tag role-{{ u.role|lower }}">
+            {% if u.role == 'SUPER_ADMIN' %}Super-admin{% elif u.role == 'ADMIN' %}Admin{% else %}Valideur{% endif %}
+          </span>
+        </td>
+        <td data-label="État">
+          {% if u.invite_token %}
+            <span class="badge badge-pending">Invitation en attente</span>
+          {% elif u.active %}
+            <span class="badge badge-active">Actif</span>
+          {% else %}
+            <span class="badge badge-inactive">Inactif</span>
+          {% endif %}
+        </td>
+        <td data-label="Actions">
+          <div class="row-actions">
+            <a href="{{ url_for('users.edit_user', user_id=u.id) }}" class="btn btn-secondary btn-sm">Éditer</a>
+            <form method="POST" action="{{ url_for('users.delete_user', user_id=u.id) }}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Supprimer définitivement {{ u.email }} ?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-ghost btn-sm">Supprimer</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card"><div class="empty">
+  <h3>Aucun utilisateur</h3>
+  <p>Invitez le premier utilisateur de la plateforme.</p>
+  <a href="{{ url_for('users.create_user') }}" class="btn btn-primary">Inviter un utilisateur</a>
+</div></div>
+{% endif %}
+{% endblock %}

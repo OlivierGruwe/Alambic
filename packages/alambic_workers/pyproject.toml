@@ -10,6 +10,13 @@ dependencies = [
     "redis>=5.0,<6",
     "boto3>=1.34,<2",
     "alambic-core",
+    # Conversion au format pivot PDF (brique D).
+    "fpdf2>=2.7,<3",          # texte → PDF
+    "pillow>=10,<13",         # lecture images
+    "reportlab>=4,<5",        # image → PDF
+    "pymupdf>=1.24,<2",       # comptage de pages PDF + rendu readCAB
+    "zxing-cpp>=2,<3",        # lecture des codes-barres (readCAB)
+    "chardet>=5,<6",          # détection d'encodage texte
 ]
 
 [dependency-groups]
@@ -53,3 +60,6 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: tests nécessitant l'infra docker-compose (Postgres + Garage) — lents",
+]

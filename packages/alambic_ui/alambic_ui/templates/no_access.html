@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Accès restreint{% endblock %}
+{% block content %}
+<div class="page-header"><h1>Accès restreint</h1></div>
+<div class="card">
+  <div class="empty">
+    <h3>Vous n'avez pas accès à cette section</h3>
+    <p>Votre rôle ({{ current_user.role }}) ne permet pas d'administrer les comptes.</p>
+  </div>
+</div>
+{% endblock %}

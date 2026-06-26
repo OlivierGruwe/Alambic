@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Nouveau compte' if mode == 'create' else 'Éditer le compte' }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ 'Nouveau compte' if mode == 'create' else 'Éditer le compte' }}</h1>
+  </div>
+</div>
+
+<div class="card form-card" style="padding: 0;">
+  <form method="POST">
+    {{ form.hidden_tag() }}
+
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab active" data-tab="general" role="tab">Général</button>
+      <button type="button" class="tab" data-tab="ia" role="tab">IA</button>
+      <button type="button" class="tab" data-tab="securite" role="tab">Sécurité</button>
+    </div>
+
+    <div class="tab-body">
+      <div class="tab-panel active" data-panel="general">
+        <div class="form-group">
+          {{ form.account_name.label }}
+          {{ form.account_name(class="form-control") }}
+          {% if form.account_name.errors %}
+            <div class="form-errors">{{ form.account_name.errors[0] }}</div>
+          {% endif %}
+        </div>
+        <div class="form-group">
+          <div class="form-check">{{ form.active() }} {{ form.active.label }}</div>
+        </div>
+        <div class="form-group">{{ form.address1.label }} {{ form.address1(class="form-control") }}</div>
+        <div class="form-group">{{ form.address2.label }} {{ form.address2(class="form-control") }}</div>
+        <div class="form-group">{{ form.address3.label }} {{ form.address3(class="form-control") }}</div>
+        <div class="form-row">
+          <div class="form-group">{{ form.zip.label }} {{ form.zip(class="form-control") }}</div>
+          <div class="form-group" style="flex:2;">{{ form.town.label }} {{ form.town(class="form-control") }}</div>
+        </div>
+        <div class="form-group">{{ form.country.label }} {{ form.country(class="form-control") }}</div>
+      </div>
+
+      <div class="tab-panel" data-panel="ia">
+        <div class="form-group">
+          {{ form.edenai_secret_key.label }}
+          {{ form.edenai_secret_key(class="form-control", placeholder="••••••••" if has_secret else "") }}
+          <div class="form-hint">
+            {% if has_secret %}
+              Une clé est actuellement définie. {{ form.edenai_secret_key.description }}
+            {% else %}
+              Aucune clé définie pour ce compte.
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="securite">
+        <div class="form-group">
+          {{ form.enrich_allowed_domains.label }}
+          {{ form.enrich_allowed_domains(class="form-control", rows="3") }}
+          <div class="form-hint">{{ form.enrich_allowed_domains.description }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions" style="padding: 0 28px 28px;">
+      <button type="submit" class="btn btn-primary">Enregistrer</button>
+      <a href="{{ url_for('accounts.list_accounts') }}" class="btn btn-secondary">Annuler</a>
+    </div>
+  </form>
+</div>
+
+<script>
+  document.querySelectorAll('.tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      var target = this.getAttribute('data-tab');
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelector('[data-panel="' + target + '"]').classList.add('active');
+    });
+  });
+</script>
+{% endblock %}

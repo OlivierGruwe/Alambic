@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Lien invalide{% endblock %}
+{% block content_anon %}
+<div class="login-page">
+  <div class="login-card" style="grid-template-columns:1fr; max-width:440px;">
+    <div class="login-form">
+      <h1>Lien invalide</h1>
+      <p class="login-sub">Ce lien d'invitation est invalide ou a expiré. Demandez à votre administrateur de vous en générer un nouveau.</p>
+      <a href="{{ url_for('auth.login') }}" class="btn btn-secondary">Aller à la connexion</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

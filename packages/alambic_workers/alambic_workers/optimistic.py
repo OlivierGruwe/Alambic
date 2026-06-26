@@ -50,7 +50,18 @@ def optimistic_object(
 
     Sur conflit de version concurrent, StaleDataError remonte — la tâche Celery
     appelante sera rejouée intégralement (acks_late).
+
+    Lève ValueError si obj_id est vide/None : les entités à id métier (Transaction
+    → trx-…, Document → doc-…) DOIVENT recevoir leur id explicite. Sans ce garde-
+    fou, le default=uuid_str des modèles générerait un id aléatoire à la place de
+    l'id attendu, créant un objet fantôme introuvable (bug silencieux).
     """
+    if not obj_id:
+        raise ValueError(
+            f"optimistic_object: id requis pour créer un {model_cls.__name__} "
+            f"(reçu {obj_id!r}). L'id métier doit être fourni explicitement."
+        )
+
     if session is not None:
         # Session injectée : l'appelant gère le commit (unité de travail partagée).
         obj = session.get(model_cls, obj_id)

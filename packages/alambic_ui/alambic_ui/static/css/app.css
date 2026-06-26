@@ -1,0 +1,511 @@
+/* ============================================================================
+   Alambic UI — design system
+   Parti pris : ardoise profond + accent bleu, typographie affirmée, sobriété.
+   ============================================================================ */
+
+:root {
+  /* ── Couleurs de marque Alambic (extraites du logo) ───────────────────────
+     Navy profond = primaire (sidebar, textes forts) ; teal = accent (actions). */
+  --navy:      #0E2140;
+  --navy-700:  #16294d;
+  --navy-600:  #1f3457;
+  --navy-500:  #2c4061;
+
+  --teal:      #0FB3A6;
+  --teal-600:  #0d9d92;
+  --teal-700:  #0b867d;
+  --teal-50:   #e6f7f5;
+  --teal-100:  #c5efea;
+
+  /* Neutres (gris froids accordés au navy) */
+  --slate-50:  #f7f9fb;
+  --slate-100: #eef2f6;
+  --slate-200: #e0e6ee;
+  --slate-300: #c8d2de;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: var(--navy);
+
+  /* Accent = teal de marque (compat avec le reste du CSS) */
+  --accent-50:  var(--teal-50);
+  --accent-100: var(--teal-100);
+  --accent-500: var(--teal);
+  --accent-600: var(--teal-600);
+  --accent-700: var(--teal-700);
+
+  /* États sémantiques */
+  --success-50: #ecfdf5;  --success-600: #059669;
+  --danger-50:  #fef2f2;  --danger-600:  #dc2626;
+  --warning-50: #fffbeb;  --warning-600: #d97706;
+
+  --radius:    8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(14, 33, 64, 0.06);
+  --shadow:    0 4px 16px rgba(14, 33, 64, 0.10);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-sans);
+  color: var(--slate-800);
+  background: var(--slate-100);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent-600); text-decoration: none; }
+a:hover { color: var(--accent-700); }
+
+/* ── App shell : sidebar + contenu ─────────────────────────────────────────── */
+.app { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 240px;
+  background: var(--slate-900);
+  color: var(--slate-300);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.sidebar-brand {
+  padding: 24px 20px;
+  border-bottom: 1px solid var(--navy-700);
+}
+.sidebar-brand .brand-logo {
+  display: block;
+  width: 100%;
+  max-width: 150px;
+  height: auto;
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 10px;
+}
+.sidebar-brand .brand-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.sidebar-brand .brand-sub {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--slate-500);
+  margin-top: 8px;
+}
+
+.sidebar-nav { flex: 1; padding: 12px 0; }
+.sidebar-nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  color: var(--slate-300);
+  font-size: 14px;
+  border-left: 3px solid transparent;
+}
+.sidebar-nav a:hover { background: var(--slate-800); color: #fff; }
+.sidebar-nav a.active {
+  background: var(--slate-800);
+  color: #fff;
+  border-left-color: var(--accent-500);
+}
+
+.sidebar-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--slate-800);
+  font-size: 13px;
+}
+.sidebar-footer .user-email { color: var(--slate-200); display: block; margin-bottom: 4px; }
+.sidebar-footer .user-role {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--slate-500);
+}
+.sidebar-footer a { color: var(--slate-400); font-size: 13px; }
+.sidebar-footer a:hover { color: #fff; }
+
+.content { flex: 1; padding: 32px 40px; max-width: 1400px; width: 100%; }
+
+/* ── Header de page ────────────────────────────────────────────────────────── */
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 28px;
+}
+.page-header h1 {
+  font-size: 24px; font-weight: 700; color: var(--slate-900);
+  letter-spacing: -0.02em;
+}
+.page-header .subtitle { font-size: 14px; color: var(--slate-500); margin-top: 2px; }
+
+/* ── Boutons ───────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 16px; font-size: 14px; font-weight: 500;
+  border-radius: var(--radius); border: 1px solid transparent;
+  cursor: pointer; transition: all 0.12s; font-family: inherit;
+}
+.btn-primary { background: var(--accent-600); color: #fff; }
+.btn-primary:hover { background: var(--accent-700); color: #fff; }
+.btn-secondary { background: #fff; color: var(--slate-700); border-color: var(--slate-300); }
+.btn-secondary:hover { background: var(--slate-50); border-color: var(--slate-400); }
+.btn-ghost { background: transparent; color: var(--slate-600); }
+.btn-ghost:hover { background: var(--slate-200); }
+.btn-sm { padding: 5px 10px; font-size: 13px; }
+
+/* ── Tableau ───────────────────────────────────────────────────────────────── */
+.card {
+  background: #fff; border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; padding: 12px 16px;
+  font-size: 12px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--slate-500);
+  background: var(--slate-50); border-bottom: 1px solid var(--slate-200);
+}
+tbody td { padding: 14px 16px; font-size: 14px; border-bottom: 1px solid var(--slate-100); }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--slate-50); }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* ── Badges ────────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; font-size: 12px; font-weight: 500;
+  border-radius: 999px;
+}
+.badge-active   { background: var(--success-50); color: var(--success-600); }
+.badge-inactive { background: var(--slate-100);  color: var(--slate-500); }
+.badge-pending  { background: var(--warning-50); color: var(--warning-600); }
+.badge::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+}
+
+/* Tags de rôle */
+.role-tag {
+  display: inline-block; padding: 3px 10px; font-size: 12px; font-weight: 500;
+  border-radius: var(--radius);
+}
+.role-super_admin { background: var(--navy); color: #fff; }
+.role-admin       { background: var(--teal-50); color: var(--teal-700); }
+.role-validator   { background: var(--slate-100); color: var(--slate-600); }
+
+/* Lien d'invitation (champ + bouton copier) */
+.invite-link { display: flex; gap: 8px; }
+.invite-link input { flex: 1; font-family: monospace; font-size: 13px; }
+
+/* ── Éditeur de champs (doctypes) ──────────────────────────────────────────── */
+.field-card {
+  border: 1px solid var(--slate-200); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 14px; background: var(--slate-50);
+}
+.field-card-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 14px;
+}
+.field-card-title { font-weight: 600; color: var(--navy); font-size: 15px; }
+.field-essentials, .field-advanced {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.field-advanced {
+  margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--slate-300);
+}
+.field-attr { display: flex; flex-direction: column; gap: 4px; }
+.field-attr label { font-size: 12px; font-weight: 500; color: var(--slate-600); }
+.field-attr input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--teal); }
+.field-toggle-advanced {
+  margin-top: 12px; background: none; border: none; cursor: pointer;
+  color: var(--teal-700); font-size: 13px; font-weight: 500; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.field-toggle-advanced::before { content: "▸"; transition: transform 0.15s; }
+.field-toggle-advanced.open::before { transform: rotate(90deg); }
+
+/* Statut de génération depuis PDF */
+.gen-status {
+  margin: 12px 0; padding: 12px 16px; border-radius: var(--radius); font-size: 14px;
+  border: 1px solid transparent;
+}
+.gen-status-loading { background: var(--teal-50); color: var(--teal-700); border-color: var(--teal-100); }
+.gen-status-success { background: var(--success-50); color: var(--success-600); border-color: #a7f3d0; }
+.gen-status-error   { background: var(--danger-50); color: var(--danger-600); border-color: #fecaca; }
+
+/* ── Formulaires ───────────────────────────────────────────────────────────── */
+.form-card { max-width: 100%; }
+.form-group { margin-bottom: 20px; }
+.form-group label {
+  display: block; font-size: 13px; font-weight: 500;
+  color: var(--slate-700); margin-bottom: 6px;
+}
+.form-control {
+  width: 100%; padding: 9px 12px; font-size: 14px; font-family: inherit;
+  color: var(--slate-800); background: #fff;
+  border: 1px solid var(--slate-300); border-radius: var(--radius);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.form-control:focus {
+  outline: none; border-color: var(--accent-500);
+  box-shadow: 0 0 0 3px var(--accent-100);
+}
+.form-check { display: flex; align-items: center; gap: 8px; }
+.form-check input { width: 16px; height: 16px; accent-color: var(--accent-600); }
+.form-errors { color: var(--danger-600); font-size: 13px; margin-top: 4px; }
+.form-actions { display: flex; gap: 10px; margin-top: 24px; }
+
+.form-section-title {
+  font-size: 13px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--teal-700);
+  margin: 28px 0 14px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--slate-200);
+}
+.form-section-title:first-child { margin-top: 0; }
+.form-row { display: flex; gap: 16px; }
+.form-row .form-group { flex: 1; }
+.form-hint { font-size: 12px; color: var(--slate-500); margin-top: 5px; }
+
+/* Curseurs (range) */
+.form-range {
+  width: 100%; accent-color: var(--teal); height: 6px; cursor: pointer;
+}
+.slider-val {
+  display: inline-block; min-width: 38px; padding: 1px 8px; margin-left: 6px;
+  background: var(--teal-50); color: var(--teal-700); border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+}
+
+/* ── Onglets ───────────────────────────────────────────────────────────────── */
+.tabs {
+  display: flex; gap: 4px; border-bottom: 1px solid var(--slate-200);
+  padding: 0 28px; overflow-x: auto;
+}
+.tab {
+  padding: 16px 18px; font-size: 14px; font-weight: 500; font-family: inherit;
+  color: var(--slate-500); background: transparent; border: none; cursor: pointer;
+  border-bottom: 2px solid transparent; white-space: nowrap; transition: color 0.12s;
+}
+.tab:hover { color: var(--slate-700); }
+.tab.active { color: var(--navy); border-bottom-color: var(--teal); }
+.tab-body { padding: 24px 28px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Disposition des champs en grille : utilise la largeur disponible.
+   Les titres de section et certains champs occupent toute la ligne. */
+.tab-panel.active,
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0 24px;
+  align-content: start;
+}
+.tab-panel .form-section-title,
+.field-grid .form-section-title { grid-column: 1 / -1; }
+/* form-row, zones de texte et sections "way" prennent toute la ligne. */
+.tab-panel .form-row,
+.field-grid .form-row { grid-column: 1 / -1; }
+.tab-panel .way-section,
+.tab-panel textarea { grid-column: 1 / -1; }
+.field-grid textarea { grid-column: 1 / -1; }
+/* À l'intérieur d'une way-section, on re-grille les champs. */
+.way-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0 24px;
+}
+.way-section .form-section-title { grid-column: 1 / -1; }
+
+/* ── Flash messages ────────────────────────────────────────────────────────── */
+.flashes { margin-bottom: 20px; }
+.flash {
+  padding: 12px 16px; border-radius: var(--radius); font-size: 14px;
+  margin-bottom: 8px; border: 1px solid transparent;
+}
+.flash-success { background: var(--success-50); color: var(--success-600); border-color: #a7f3d0; }
+.flash-error   { background: var(--danger-50);  color: var(--danger-600);  border-color: #fecaca; }
+.flash-info    { background: var(--accent-50);  color: var(--accent-700);  border-color: var(--accent-100); }
+
+/* ── État vide ─────────────────────────────────────────────────────────────── */
+.empty {
+  text-align: center; padding: 48px 24px; color: var(--slate-500);
+}
+.empty h3 { font-size: 16px; color: var(--slate-700); margin-bottom: 6px; }
+.empty p { font-size: 14px; margin-bottom: 16px; }
+
+/* ── Login (deux panneaux) ─────────────────────────────────────────────────── */
+.login-page {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: var(--slate-100); padding: 24px;
+}
+.login-card {
+  display: grid; grid-template-columns: 1fr 1fr;
+  width: 760px; max-width: 100%;
+  background: #fff; border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.login-brand {
+  background: var(--slate-900); color: #fff;
+  padding: 40px 36px; display: flex; flex-direction: column; justify-content: space-between;
+}
+.login-brand .brand-eyebrow {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--teal);
+}
+.login-brand .login-logo {
+  width: 140px; height: auto;
+  background: #fff; border-radius: var(--radius); padding: 12px;
+}
+.login-brand h2 { font-size: 22px; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.01em; }
+.login-brand p { font-size: 14px; color: var(--slate-400); line-height: 1.6; }
+.login-brand .brand-foot { font-size: 12px; color: var(--slate-600); }
+.login-form { padding: 40px 36px; }
+.login-form h1 { font-size: 22px; font-weight: 700; color: var(--slate-900); margin-bottom: 4px; }
+.login-form .login-sub { font-size: 14px; color: var(--slate-500); margin-bottom: 24px; }
+.login-form .btn-primary { width: 100%; justify-content: center; padding: 11px; }
+
+/* ── Éléments mobiles (masqués sur desktop par défaut) ─────────────────────── */
+.topbar-mobile { display: none; }
+.sidebar-overlay { display: none; }
+
+/* ============================================================================
+   RESPONSIVE — tablette et mobile
+   ============================================================================ */
+
+/* Tablette : sidebar un peu plus étroite, contenu resserré */
+@media (max-width: 1024px) {
+  .sidebar { width: 200px; }
+  .content { padding: 28px 28px; }
+}
+
+/* Mobile : sidebar en drawer, topbar avec hamburger, tableaux en cartes */
+@media (max-width: 768px) {
+  /* Barre supérieure mobile avec hamburger + logo */
+  .topbar-mobile {
+    display: flex; align-items: center; gap: 14px;
+    position: sticky; top: 0; z-index: 30;
+    background: var(--navy); padding: 12px 16px;
+    border-bottom: 1px solid var(--navy-700);
+  }
+  .topbar-logo { height: 32px; background: #fff; border-radius: 6px; padding: 4px 8px; }
+  .menu-toggle {
+    display: flex; flex-direction: column; justify-content: center; gap: 5px;
+    width: 44px; height: 44px; padding: 10px; background: transparent;
+    border: none; cursor: pointer;
+  }
+  .menu-toggle span {
+    display: block; height: 2px; width: 100%; background: #fff; border-radius: 2px;
+    transition: transform 0.2s;
+  }
+
+  /* L'app passe en colonne ; la sidebar devient un drawer hors écran */
+  .app { flex-direction: column; }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
+    width: 270px; max-width: 85vw;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  /* Overlay sombre quand le drawer est ouvert */
+  .sidebar-overlay {
+    position: fixed; inset: 0; z-index: 40;
+    background: rgba(14, 33, 64, 0.5); opacity: 0;
+    pointer-events: none; transition: opacity 0.25s;
+  }
+  .sidebar-overlay.show { display: block; opacity: 1; pointer-events: auto; }
+
+  .content { padding: 20px 16px; max-width: 100%; }
+
+  /* En-tête de page : empilé sur mobile */
+  .page-header { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .page-header .btn { width: 100%; justify-content: center; }
+
+  /* ── Tableau → cartes empilées ──────────────────────────────────────────── */
+  .responsive-table thead { display: none; }
+  .responsive-table, .responsive-table tbody, .responsive-table tr, .responsive-table td {
+    display: block; width: 100%;
+  }
+  .responsive-table tr {
+    border: 1px solid var(--slate-200); border-radius: var(--radius);
+    margin-bottom: 12px; padding: 4px 0; background: #fff;
+  }
+  .responsive-table tr:hover { background: #fff; }
+  .responsive-table td {
+    border: none; padding: 8px 16px;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  /* Étiquette de colonne (depuis data-label) à gauche de chaque valeur */
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.03em; color: var(--slate-500); flex-shrink: 0;
+  }
+  /* La cellule d'actions : étiquette masquée, boutons pleine largeur */
+  .responsive-table td[data-label="Actions"] { flex-direction: column; align-items: stretch; }
+  .responsive-table td[data-label="Actions"]::before { display: none; }
+  .row-actions { width: 100%; }
+  .row-actions .btn { flex: 1; justify-content: center; }
+  .row-actions form { flex: 1; display: flex; }
+  .row-actions form .btn { width: 100%; }
+
+  /* Formulaires : lignes empilées, champs pleine largeur */
+  .form-row { flex-direction: column; gap: 0; }
+  .form-card { max-width: 100%; }
+  .form-actions { flex-direction: column; }
+  .form-actions .btn { width: 100%; justify-content: center; }
+
+  /* Login : panneau de marque masqué, carte pleine largeur */
+  .login-card { grid-template-columns: 1fr; }
+  .login-brand { display: none; }
+  .login-form { padding: 32px 24px; }
+}
+
+/* Cibles tactiles : boutons un peu plus hauts sur écrans tactiles */
+
+/* ── Sections et icônes du menu (style FlowerScan) ───────────────── */
+.nav-ico {
+  width: 18px; height: 18px; flex-shrink: 0;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.nav-section {
+  padding: 16px 20px 6px;
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--slate-500);
+}
+.nav-soon {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 20px;
+  color: var(--slate-600);
+  font-size: 14px;
+  cursor: not-allowed;
+  border-left: 3px solid transparent;
+}
+.nav-soon .nav-ico { opacity: .5; }
+.soon-tag {
+  margin-left: auto;
+  font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+  background: var(--slate-800); color: var(--slate-400);
+  padding: 2px 7px; border-radius: 999px;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .btn { min-height: 42px; }
+  .sidebar-nav a { padding: 14px 20px; }
+}
+
+/* Respect de la préférence de mouvement réduit */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .sidebar-overlay { transition: none; }
+}

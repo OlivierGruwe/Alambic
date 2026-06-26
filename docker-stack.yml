@@ -1,0 +1,124 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Alambic — stack Docker SWARM (production).
+#
+# Déploiement : make swarm-deploy   (docker stack deploy -c docker-stack.yml alambic)
+#
+# Différences avec le compose de dev :
+# - Swarm IGNORE `build` et `depends_on: condition`. Les images doivent être
+#   PRÉ-CONSTRUITES et disponibles (registry, ou présentes sur les nœuds).
+#   Construire avant : make build-app, puis pousser sur votre registry souverain.
+# - La résilience vient de `deploy` (replicas, restart_policy, placement).
+# - Les effectifs par étape sont réglés ici (deploy.replicas), pilotables aussi
+#   à chaud : make swarm-scale SVC=ocr-worker N=5.
+#
+# Les secrets (clés Garage, Fernet, mots de passe) devraient passer par des
+# Docker secrets en prod, pas des variables d'environnement. Voir DEPLOIEMENT.md.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+version: "3.8"
+
+x-app-env: &app-env
+  CELERY_BROKER: ${CELERY_BROKER}
+  CELERY_BACKEND: ${CELERY_BACKEND}
+  ALAMBIC_DATABASE_URL: ${ALAMBIC_DATABASE_URL}
+  ALAMBIC_SECRET_KEY: ${ALAMBIC_SECRET_KEY}
+  ALAMBIC_S3_ENDPOINT: ${ALAMBIC_S3_ENDPOINT}
+  ALAMBIC_S3_REGION: ${ALAMBIC_S3_REGION:-garage}
+  ALAMBIC_S3_ACCESS_KEY: ${ALAMBIC_S3_ACCESS_KEY}
+  ALAMBIC_S3_SECRET_KEY: ${ALAMBIC_S3_SECRET_KEY}
+  ALAMBIC_S3_INPUT_BUCKET: ${ALAMBIC_S3_INPUT_BUCKET:-alambic-input}
+  ALAMBIC_S3_WORK_BUCKET: ${ALAMBIC_S3_WORK_BUCKET:-alambic-work}
+  ALAMBIC_RETENTION_DAYS: ${ALAMBIC_RETENTION_DAYS:-30}
+
+x-restart: &restart
+  restart_policy:
+    condition: any
+    delay: 5s
+
+services:
+  normal-worker:
+    image: ${REGISTRY:-alambic}/alambic-app:base
+    command: celery -A alambic_workers.celery_app:app worker -Q normal,high,low -n normal@%h --loglevel=INFO
+    environment: *app-env
+    networks: [alambic_net]
+    deploy:
+      replicas: ${NORMAL_REPLICAS:-1}
+      <<: *restart
+
+  office-worker:
+    image: ${REGISTRY:-alambic}/alambic-app:office
+    command: celery -A alambic_workers.celery_app:app worker -Q office -n office@%h --loglevel=INFO
+    environment: *app-env
+    networks: [alambic_net]
+    deploy:
+      replicas: ${OFFICE_REPLICAS:-1}
+      <<: *restart
+
+  cab-worker:
+    image: ${REGISTRY:-alambic}/alambic-app:base
+    command: celery -A alambic_workers.celery_app:app worker -Q cab -n cab@%h --loglevel=INFO
+    environment: *app-env
+    networks: [alambic_net]
+    deploy:
+      replicas: ${CAB_REPLICAS:-1}
+      <<: *restart
+
+  ocr-worker:
+    image: ${REGISTRY:-alambic}/alambic-app:base
+    command: celery -A alambic_workers.celery_app:app worker -Q ocr -n ocr@%h --loglevel=INFO
+    environment: *app-env
+    networks: [alambic_net]
+    deploy:
+      replicas: ${OCR_REPLICAS:-2}
+      <<: *restart
+
+  classif-worker:
+    image: ${REGISTRY:-alambic}/alambic-app:base
+    command: celery -A alambic_workers.celery_app:app worker -Q classif -n classif@%h --loglevel=INFO
+    environment: *app-env
+    networks: [alambic_net]
+    deploy:
+      replicas: ${CLASSIF_REPLICAS:-1}
+      <<: *restart
+
+  extract-worker:
+    image: ${REGISTRY:-alambic}/alambic-app:base
+    command: celery -A alambic_workers.celery_app:app worker -Q extract -n extract@%h --loglevel=INFO
+    environment: *app-env
+    networks: [alambic_net]
+    deploy:
+      replicas: ${EXTRACT_REPLICAS:-1}
+      <<: *restart
+
+  poller:
+    image: ${REGISTRY:-alambic}/alambic-app:base
+    command: python -m alambic_workers.trigger.poller --interval ${POLLER_INTERVAL:-5}
+    environment: *app-env
+    networks: [alambic_net]
+    deploy:
+      replicas: 1
+      <<: *restart
+
+  beat:
+    image: ${REGISTRY:-alambic}/alambic-app:base
+    command: celery -A alambic_workers.celery_app:app beat --loglevel=INFO
+    environment: *app-env
+    networks: [alambic_net]
+    deploy:
+      replicas: 1
+      <<: *restart
+
+  ui:
+    image: ${REGISTRY:-alambic}/alambic-app:base
+    command: gunicorn "alambic_ui:create_app()" --bind 0.0.0.0:5000 --workers ${UI_WORKERS:-2} --timeout 120
+    environment: *app-env
+    networks: [alambic_net]
+    ports:
+      - "${UI_PORT:-5000}:5000"
+    deploy:
+      replicas: 1
+      <<: *restart
+
+networks:
+  alambic_net:
+    driver: overlay

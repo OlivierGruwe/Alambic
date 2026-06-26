@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Invitation générée{% endblock %}
+{% block content %}
+<div class="page-header"><div><h1>Invitation générée</h1></div></div>
+<div class="card" style="padding:28px;">
+  <p style="margin-bottom:16px;">
+    Transmettez ce lien à <strong>{{ user.email }}</strong>. Il lui permettra de
+    définir son mot de passe. Le lien expire dans 7 jours.
+  </p>
+  <div class="invite-link">
+    <input type="text" class="form-control" value="{{ invite_url }}" readonly id="invite-url"
+           onclick="this.select()">
+    <button type="button" class="btn btn-secondary" onclick="copyInvite()">Copier</button>
+  </div>
+  <div class="form-hint" style="margin-top:8px;">
+    L'envoi automatique par email sera disponible une fois le serveur de messagerie configuré.
+  </div>
+  <div style="margin-top:24px;">
+    <a href="{{ url_for('users.list_users') }}" class="btn btn-primary">Retour aux utilisateurs</a>
+  </div>
+</div>
+<script>
+  function copyInvite() {
+    var f = document.getElementById('invite-url');
+    f.select(); document.execCommand('copy');
+  }
+</script>
+{% endblock %}

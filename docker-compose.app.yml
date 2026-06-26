@@ -1,0 +1,129 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Alambic — services applicatifs (workers, poller, beat, UI).
+#
+# S'utilise EN PLUS de docker-compose.yml (l'infra). Exemples :
+#   Tout lancer :   docker compose -f docker-compose.yml -f docker-compose.app.yml up -d
+#   (via Makefile : make up-all)
+#
+# SCALABILITÉ PAR ÉTAPE : chaque queue lourde a son service worker, dont le
+# nombre de répliques se règle par une variable .env (ex. OCR_REPLICAS=3). Régler
+# l'effectif = éditer le .env et relancer. Un seul artefact d'image (alambic-app).
+#
+# COMPOSE vs SWARM : la clé `deploy.replicas` est lue par Swarm. En Compose v2,
+# `docker compose up --scale ocr-worker=3` ou la variable via `deploy` (Compose
+# récent honore deploy.replicas). Le même fichier sert les deux.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: alambic
+
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+    target: base
+  image: alambic-app:base
+
+# Bloc commun à tous les services applicatifs : env + dépendances + réseau.
+x-app-common: &app-common
+  restart: unless-stopped
+  networks:
+    - alambic_net
+  depends_on:
+    postgres:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    embeddings:
+      # service_started (pas healthy) : on ne bloque pas le démarrage des workers
+      # sur le chargement du modèle (~180s au 1er run). Si l'embedding n'est pas
+      # encore prêt, la classification dégrade gracieusement sur le LLM.
+      condition: service_started
+  # env_file (et NON 'environment' avec substitution) : l'ordre est garanti et
+  # stable — chaque fichier est lu dans l'ordre, le DERNIER l'emporte. Donc
+  # .env.docker surcharge .env (hôtes → noms de services Docker). Indépendant de
+  # la version de Compose, contrairement à la priorité des --env-file en CLI.
+  env_file:
+    - .env
+    - .env.docker
+
+services:
+  # ── Worker NORMAL : ingestion, dispatch, étapes légères (detect_split, finalize)
+  normal-worker:
+    <<: [*app-image, *app-common]
+    command: celery -A alambic_workers.celery_app:app worker -Q normal,high,low -n normal@%h --loglevel=INFO
+    deploy:
+      replicas: ${NORMAL_REPLICAS:-1}
+
+  # ── Worker OFFICE : conversion LibreOffice (image office) ──────────────────
+  office-worker:
+    <<: *app-common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: office
+    image: alambic-app:office
+    command: celery -A alambic_workers.celery_app:app worker -Q office -n office@%h --loglevel=INFO
+    deploy:
+      replicas: ${OFFICE_REPLICAS:-1}
+
+  # ── Worker CAB : lecture codes-barres (local, léger) ───────────────────────
+  cab-worker:
+    <<: [*app-image, *app-common]
+    command: celery -A alambic_workers.celery_app:app worker -Q cab -n cab@%h --loglevel=INFO
+    deploy:
+      replicas: ${CAB_REPLICAS:-1}
+
+  # ── Worker OCR : OCR EdenAI (coûteux → on en met plusieurs) ────────────────
+  ocr-worker:
+    <<: [*app-image, *app-common]
+    command: celery -A alambic_workers.celery_app:app worker -Q ocr -n ocr@%h --loglevel=INFO
+    deploy:
+      replicas: ${OCR_REPLICAS:-2}
+
+  # ── Worker CLASSIF : classification IA ─────────────────────────────────────
+  classif-worker:
+    <<: [*app-image, *app-common]
+    command: celery -A alambic_workers.celery_app:app worker -Q classif -n classif@%h --loglevel=INFO
+    deploy:
+      replicas: ${CLASSIF_REPLICAS:-1}
+
+  # ── Worker EXTRACT : extraction de champs IA ───────────────────────────────
+  extract-worker:
+    <<: [*app-image, *app-common]
+    command: celery -A alambic_workers.celery_app:app worker -Q extract -n extract@%h --loglevel=INFO
+    deploy:
+      replicas: ${EXTRACT_REPLICAS:-1}
+
+  # ── Poller : scrute __uploads__ dans Garage et déclenche l'ingestion ───────
+  poller:
+    <<: [*app-image, *app-common]
+    command: python -m alambic_workers.trigger.poller --interval ${POLLER_INTERVAL:-5}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      garage:
+        condition: service_started
+    deploy:
+      replicas: 1
+
+  # ── Beat : planificateur (purge de rétention quotidienne) ──────────────────
+  beat:
+    <<: [*app-image, *app-common]
+    command: celery -A alambic_workers.celery_app:app beat --loglevel=INFO
+    deploy:
+      replicas: 1
+
+  # ── UI : webapp d'administration (Flask via gunicorn, serveur de prod) ─────
+  ui:
+    <<: [*app-image, *app-common]
+    command: gunicorn "alambic_ui:create_app()" --bind 0.0.0.0:5000 --workers ${UI_WORKERS:-2} --timeout 120
+    ports:
+      - "${UI_PORT:-5000}:5000"
+    deploy:
+      replicas: 1

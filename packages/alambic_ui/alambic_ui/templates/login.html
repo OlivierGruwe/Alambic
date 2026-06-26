@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Connexion{% endblock %}
+
+{% block content_anon %}
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-brand">
+      <img src="{{ url_for('static', filename='img/alambic-logo.png') }}"
+           alt="Alambic" class="login-logo">
+      <div>
+        <h2>Plateforme d'administration</h2>
+        <p>Gestion des comptes, configurations et validation documentaire.</p>
+      </div>
+      <div class="brand-foot">Souverain · self-hosted</div>
+    </div>
+
+    <div class="login-form">
+      <h1>Connexion</h1>
+      <p class="login-sub">Accédez à votre espace de travail.</p>
+
+      {% include "_flashes.html" %}
+
+      <form method="POST" action="{{ url_for('auth.login') }}">
+        {{ form.hidden_tag() }}
+
+        <div class="form-group">
+          {{ form.email.label }}
+          {{ form.email(class="form-control", placeholder="votre@email.com", autofocus=true) }}
+          {% if form.email.errors %}
+            <div class="form-errors">{{ form.email.errors[0] }}</div>
+          {% endif %}
+        </div>
+
+        <div class="form-group">
+          {{ form.password.label }}
+          {{ form.password(class="form-control", placeholder="••••••••") }}
+          {% if form.password.errors %}
+            <div class="form-errors">{{ form.password.errors[0] }}</div>
+          {% endif %}
+        </div>
+
+        <button type="submit" class="btn btn-primary">Se connecter</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

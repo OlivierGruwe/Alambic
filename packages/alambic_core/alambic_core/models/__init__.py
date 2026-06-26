@@ -8,14 +8,18 @@ from .doctype import Doctype
 from .document import Document, DocumentIndex
 from .message import Message
 from .transaction import Transaction
+from .transaction_step import TransactionStep
+from .user import User
 
 __all__ = [
     "Account",
     "Config",
     "Doctype",
     "Transaction",
+    "TransactionStep",
     "Document",
     "DocumentIndex",
     "Message",
     "Cost",
+    "User",
 ]

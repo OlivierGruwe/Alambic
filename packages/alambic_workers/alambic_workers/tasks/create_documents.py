@@ -110,6 +110,11 @@ def update_document(
       - renvoie {documentId, bucket, key, file:{…}} si OK, None si erreur.
     """
     doc_id = file.get("documentId")
+    if not doc_id:
+        raise ValueError(
+            f"update_document: 'documentId' manquant dans le fichier {file!r}. "
+            "Chaque document du payload doit porter un documentId."
+        )
     file_ref = file.get("file") or {}
     bucket = file.get("bucket") or file_ref.get("bucket")
     key = file.get("key") or file_ref.get("key")

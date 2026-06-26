@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Configurations{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Configurations</h1>
+    <div class="subtitle">{{ configs|length }} configuration{{ 's' if configs|length != 1 }}</div>
+  </div>
+  <a href="{{ url_for('configs.create_config') }}" class="btn btn-primary">Nouvelle configuration</a>
+</div>
+
+{% if configs %}
+<div class="card">
+  <table class="responsive-table">
+    <thead>
+      <tr><th>Nom</th><th>Validation</th><th>Multi-doc</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for cfg in configs %}
+      <tr>
+        <td data-label="Nom"><strong>{{ cfg.config_name }}</strong></td>
+        <td data-label="Validation">
+          {% if cfg.need_validation %}
+            <span class="badge badge-pending">Requise</span>
+          {% else %}
+            <span class="badge badge-active">Auto</span>
+          {% endif %}
+        </td>
+        <td data-label="Multi-doc">{{ 'Oui' if cfg.multi_doc_detect else 'Non' }}</td>
+        <td data-label="Actions">
+          <div class="row-actions">
+            <a href="{{ url_for('configs.edit_config', config_id=cfg.id) }}" class="btn btn-secondary btn-sm">Éditer</a>
+            <form method="POST" action="{{ url_for('configs.delete_config', config_id=cfg.id) }}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Supprimer la configuration {{ cfg.config_name }} ?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-ghost btn-sm">Supprimer</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card"><div class="empty">
+  <h3>Aucune configuration</h3>
+  <p>Créez une configuration pour relier un compte, un doctype et le paramétrage du pipeline.</p>
+  <a href="{{ url_for('configs.create_config') }}" class="btn btn-primary">Nouvelle configuration</a>
+</div></div>
+{% endif %}
+{% endblock %}

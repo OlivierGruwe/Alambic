@@ -19,6 +19,7 @@ from ..models import (
     DocumentIndex,
     Message,
     Transaction,
+    User,
 )
 from .base import BaseRepository
 
@@ -163,3 +164,29 @@ class CostRepository(BaseRepository[Cost]):
         return list(
             self.session.scalars(select(Cost).where(Cost.transaction_id == transaction_id)).all()
         )
+
+
+class UserRepository(BaseRepository[User]):
+    model = User
+
+    def by_email(self, email: str) -> User | None:
+        """Retrouve un utilisateur par email (normalisé en minuscules)."""
+        email = (email or "").strip().lower()
+        if not email:
+            return None
+        return self.session.scalars(select(User).where(User.email == email)).first()
+
+    def by_account(self, account_id: str) -> list[User]:
+        return list(self.session.scalars(select(User).where(User.account_id == account_id)).all())
+
+    def by_role(self, role: str) -> list[User]:
+        return list(self.session.scalars(select(User).where(User.role == role)).all())
+
+    def has_any_super_admin(self) -> bool:
+        """True si au moins un SUPER_ADMIN existe (pour le bootstrap idempotent)."""
+        from ..domain.enums import UserRole
+
+        found = self.session.scalars(
+            select(User).where(User.role == UserRole.SUPER_ADMIN.value).limit(1)
+        ).first()
+        return found is not None

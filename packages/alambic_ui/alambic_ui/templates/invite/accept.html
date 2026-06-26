@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Définir votre mot de passe{% endblock %}
+{% block content_anon %}
+<div class="login-page">
+  <div class="login-card" style="grid-template-columns:1fr; max-width:440px;">
+    <div class="login-form">
+      <h1>Bienvenue</h1>
+      <p class="login-sub">Définissez le mot de passe de votre compte ({{ email }}).</p>
+      {% include "_flashes.html" %}
+      <form method="POST">
+        {{ form.hidden_tag() }}
+        <div class="form-group">
+          {{ form.password.label }} {{ form.password(class="form-control") }}
+          {% if form.password.errors %}<div class="form-errors">{{ form.password.errors[0] }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          {{ form.confirm.label }} {{ form.confirm(class="form-control") }}
+          {% if form.confirm.errors %}<div class="form-errors">{{ form.confirm.errors[0] }}</div>{% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Définir mon mot de passe</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

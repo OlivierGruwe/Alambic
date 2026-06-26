@@ -118,8 +118,8 @@ def start_ingestion(
         document_id = f"doc-{oid}"
         ext = _get_extension(filename)
 
-        work_bucket = os.environ.get("ALAMBIC_WORK_BUCKET", "alambic-work")
-        input_bucket = os.environ.get("ALAMBIC_INPUT_BUCKET", "alambic-input")
+        work_bucket = os.environ.get("ALAMBIC_S3_WORK_BUCKET", "alambic-work")
+        input_bucket = os.environ.get("ALAMBIC_S3_INPUT_BUCKET", "alambic-input")
         work_key = "/".join(
             ["__transactions__", account_id, config_id, transaction_id, f"{transaction_id}.{ext}"]
         )

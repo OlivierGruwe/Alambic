@@ -10,6 +10,7 @@ from .entities import (
     DocumentRepository,
     MessageRepository,
     TransactionRepository,
+    UserRepository,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "DocumentIndexRepository",
     "MessageRepository",
     "CostRepository",
+    "UserRepository",
 ]

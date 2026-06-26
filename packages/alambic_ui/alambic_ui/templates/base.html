@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Alambic{% endblock %} · Alambic</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+{% if current_user.is_authenticated %}
+  <div class="app">
+    <div class="topbar-mobile">
+      <button class="menu-toggle" aria-label="Ouvrir le menu" onclick="toggleSidebar()">
+        <span></span><span></span><span></span>
+      </button>
+      <img src="{{ url_for('static', filename='img/alambic-logo.png') }}"
+           alt="Alambic" class="topbar-logo">
+    </div>
+    <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <img src="{{ url_for('static', filename='img/alambic-logo.png') }}"
+             alt="Alambic" class="brand-logo">
+        <div class="brand-sub">Administration</div>
+      </div>
+      <nav class="sidebar-nav">
+        {% if current_user.is_admin %}
+        <a href="{{ url_for('dashboard.index') }}"
+           class="{{ 'active' if request.blueprint == 'dashboard' }}">
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9"/><path d="M12 12l4-2.5M12 7v5"/>
+          </svg>
+          Tableau de bord
+        </a>
+
+        <div class="nav-section">Administration</div>
+        <a href="{{ url_for('accounts.list_accounts') }}"
+           class="{{ 'active' if request.blueprint == 'accounts' }}">
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 8h2M9 12h2M9 16h2M14 8h1M14 12h1"/>
+          </svg>
+          Comptes
+        </a>
+        <a href="{{ url_for('users.list_users') }}"
+           class="{{ 'active' if request.blueprint == 'users' }}">
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="9" cy="8" r="3"/><path d="M3 20c0-3 2.5-5 6-5s6 2 6 5"/><path d="M16 6a3 3 0 010 6M18 20c0-2-1-3.5-2.5-4.5"/>
+          </svg>
+          Utilisateurs
+        </a>
+        <a href="{{ url_for('doctypes.list_doctypes') }}"
+           class="{{ 'active' if request.blueprint == 'doctypes' }}">
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>
+          </svg>
+          Types de documents
+        </a>
+        <a href="{{ url_for('configs.list_configs') }}"
+           class="{{ 'active' if request.blueprint == 'configs' }}">
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 8h14M5 12h14M5 16h14"/><circle cx="9" cy="8" r="2" fill="currentColor"/><circle cx="15" cy="16" r="2" fill="currentColor"/>
+          </svg>
+          Configurations
+        </a>
+        <span class="nav-soon" title="Bientôt disponible">
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="5" width="18" height="14" rx="1"/><path d="M3 7l9 6 9-6"/>
+          </svg>
+          Conf. Email
+          <span class="soon-tag">bientôt</span>
+        </span>
+        <span class="nav-soon" title="Bientôt disponible">
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="8" cy="14" r="4"/><path d="M11 11l8-8M16 3h4v4M14 9l2 2"/>
+          </svg>
+          API Keys
+          <span class="soon-tag">bientôt</span>
+        </span>
+        {% endif %}
+
+        <div class="nav-section">Traitement</div>
+        <a href="{{ url_for('transactions.index') }}"
+           class="{{ 'active' if request.blueprint == 'transactions' }}">
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 9h13l-3-3M20 15H7l3 3"/>
+          </svg>
+          Transactions
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <span class="user-email">{{ current_user.email }}</span>
+        <span class="user-role">{{ current_user.role }}</span>
+        <div style="margin-top:10px;">
+          <a href="{{ url_for('auth.logout') }}">Se déconnecter</a>
+        </div>
+      </div>
+    </aside>
+    <main class="content">
+      {% include "_flashes.html" %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <script>
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.querySelector('.sidebar-overlay').classList.toggle('show');
+    }
+  </script>
+{% else %}
+  {% block content_anon %}{% endblock %}
+{% endif %}
+</body>
+</html>
