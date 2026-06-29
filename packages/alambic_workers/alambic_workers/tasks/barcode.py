@@ -31,12 +31,23 @@ def _config_doctype_json(config_id: str | None) -> str | None:
     """json_content du doctype de la config, ou None si introuvable."""
     if not config_id:
         return None
+    from alambic_core.services.completeness import doctype_ids_from_expected
+
     with session_scope() as s:
         config = s.get(Config, config_id)
-        if config is None or not config.doctype_id:
+        if config is None:
             return None
-        doctype = s.get(Doctype, config.doctype_id)
-        return doctype.json_content if doctype is not None else None
+        # Avant classification : on concatène le json_content de tous les doctypes
+        # attendus (repli doctype_id) pour détecter une stratégie code-barres.
+        doctype_ids = doctype_ids_from_expected(config) or (
+            [config.doctype_id] if config.doctype_id else []
+        )
+        contents = []
+        for did in doctype_ids:
+            doctype = s.get(Doctype, did)
+            if doctype is not None and doctype.json_content:
+                contents.append(doctype.json_content)
+        return "\n".join(contents) if contents else None
 
 
 def read_cab_document(payload: dict) -> dict:

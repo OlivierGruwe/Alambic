@@ -98,7 +98,10 @@ def test_list_excludes_deprecated_from_count(app_ctx):
     login(client)
     page = client.get("/transactions/").get_data(as_text=True)
     # data-docs-for affiche 2 (les 2 enfants, pas le parent déprécié).
-    assert 'data-docs-for="trx-1">2<' in page
+    import re
+
+    m = re.search(r'data-docs-for="trx-1"[^>]*>(\d+)<', page)
+    assert m and m.group(1) == "2"
 
 
 def test_documents_lazy_endpoint(app_ctx):
@@ -224,3 +227,50 @@ def test_retry_refuses_non_working(app_ctx):
     tok = csrf(client.get("/transactions/").get_data(as_text=True))
     r = client.post("/transactions/tx-done2/retry", data={"csrf_token": tok}, follow_redirects=True)
     assert "en cours" in r.get_data(as_text=True).lower()
+
+
+def test_delete_allows_stuck_transaction(app_ctx):
+    """Une transaction bloquée (WORKING figée >10 min) est supprimable."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import text
+
+    app, Sess = app_ctx
+    old = (datetime.now(UTC) - timedelta(minutes=30)).replace(tzinfo=None)
+    with Sess() as s:
+        s.add(Account(id="acc1", account_name="A"))
+        s.add(Config(id="cfg1", config_name="C", account_id="acc1"))
+        s.add(Transaction(id="tx-stuck", status="WORKING", process="X", account_id="acc1"))
+        s.add(Document(id="tx-stuck_1", transaction_id="tx-stuck", status="OCR_DONE", process="X"))
+        s.commit()
+        # Force updated_at dans le passé via SQL brut (contourne le onupdate ORM).
+        s.execute(
+            text("UPDATE transactions SET updated_at = :u WHERE id = 'tx-stuck'"),
+            {"u": old},
+        )
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    tok = csrf(client.get("/transactions/").get_data(as_text=True))
+    r = client.post(
+        "/transactions/tx-stuck/delete", data={"csrf_token": tok}, follow_redirects=True
+    )
+    assert "Impossible de supprimer une transaction en cours" not in r.get_data(as_text=True)
+
+
+def test_action_buttons_not_nested_in_bulk_form(app_ctx):
+    """Les formulaires d'action (relance/supprimer) ne sont pas imbriqués dans le form bulk."""
+    app, Sess = app_ctx
+    with Sess() as s:
+        s.add(Transaction(id="tx1", status="FAILED", process="X", account_id="acc1"))
+        s.commit()
+    client = app.test_client()
+    login(client)
+    page = client.get("/transactions/").get_data(as_text=True)
+    # Le form bulk doit se fermer AVANT le tableau (pas d'imbrication).
+    bulk_open = page.find('id="bulk-form"')
+    table_open = page.find('<table class="tx-table"')
+    # Le </form> du bulk doit apparaître entre l'ouverture du form et le tableau.
+    bulk_close = page.find("</form>", bulk_open)
+    assert bulk_open < bulk_close < table_open

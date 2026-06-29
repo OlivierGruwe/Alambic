@@ -30,7 +30,10 @@ def test_create_config_maps_to_blocks(app_ctx):
             "need_validation": "on",
             "csrf_token": tok,
             "auto_validation_threshold": "1",
-            "completeness_check": "on",
+            "expected_doctypes": (
+                '[{"doctype_id":"CNI","required":true},'
+                '{"doctype_id":"PERMIS","required":false}]'
+            ),
             "ocr_provider": "ocr/ocr/mistral",
             "extract_model": "mistral-small",
             "way_in": "S3",
@@ -44,7 +47,10 @@ def test_create_config_maps_to_blocks(app_ctx):
     with Sess() as s:
         cfg = s.query(Config).filter_by(config_name="C1").first()
         assert cfg.need_validation is True
-        assert cfg.general["completeness_check"] is True
+        assert cfg.expected_doctypes == [
+            {"doctype_id": "CNI", "required": True},
+            {"doctype_id": "PERMIS", "required": False},
+        ]
         assert cfg.edenai_settings["ocr_provider"] == "ocr/ocr/mistral"
         assert cfg.ws["way_in"] == "S3"
         assert cfg.ws["export_url"] == "https://x.fr"
@@ -211,3 +217,41 @@ def test_ocr_is_dynamic_select(app_ctx):
     assert 'data-feature="ocr"' in page
     # L'embedding est désormais servi en local (TEI), il ne figure plus dans la config.
     assert 'data-feature="embedding"' not in page
+
+
+def test_duplicate_config_creates_inactive_copy(app_ctx):
+    """Dupliquer une config crée une copie inactive avec un nom indexé."""
+    app, Sess = app_ctx
+    from alambic_core.models import Config
+
+    with Sess() as s:
+        s.add(Config(id="src", config_name="Ma Config", account_id="acc1", is_active=True))
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    tok = csrf(client.get("/configs/").get_data(as_text=True))
+    client.post("/configs/src/duplicate", data={"csrf_token": tok}, follow_redirects=True)
+
+    with Sess() as s:
+        copies = s.query(Config).filter(Config.config_name == "Ma Config (copie)").all()
+        assert len(copies) == 1
+        assert copies[0].is_active is False
+
+
+def test_toggle_active(app_ctx):
+    """Activer/désactiver bascule le drapeau is_active."""
+    app, Sess = app_ctx
+    from alambic_core.models import Config
+
+    with Sess() as s:
+        s.add(Config(id="c1", config_name="C", account_id="acc1", is_active=True))
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    tok = csrf(client.get("/configs/").get_data(as_text=True))
+    client.post("/configs/c1/toggle-active", data={"csrf_token": tok}, follow_redirects=True)
+
+    with Sess() as s:
+        assert s.get(Config, "c1").is_active is False

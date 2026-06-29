@@ -78,6 +78,7 @@ def index():
     from datetime import datetime, timedelta
 
     from alambic_core.models import Account, Config, Cost, Document
+    from alambic_core.services.completeness import compute_completeness
     from alambic_core.services.transaction_status import (
         compute_transaction_status,
         count_active_documents,
@@ -104,6 +105,12 @@ def index():
         txs, has_next = _visible_transactions(s, sort_by=sort_by, order=order, page=page)
         account_names = {a.id: a.account_name for a in s.query(Account).all()}
         config_names = {c.id: c.config_name for c in s.query(Config).all()}
+        # Objets Config (pour le calcul de complétude par transaction).
+        config_objs = {c.id: c for c in s.query(Config).all()}
+        # Mapping doctype_id → nom (pour comparer/afficher la complétude).
+        from alambic_core.models import Doctype
+
+        doctype_names = {d.id: d.doctype_name for d in s.query(Doctype).all()}
 
         # Coût par transaction (somme de la table Cost).
         cost_rows = (
@@ -126,6 +133,22 @@ def index():
                 status == "WORKING" and updated is not None and (now - updated) > stuck_threshold
             )
 
+            # Complétude du dossier (si la config a des doctypes obligatoires).
+            cfg_obj = config_objs.get(tx.config_id)
+            completeness = None
+            if cfg_obj is not None:
+                res = compute_completeness(cfg_obj, docs, doctype_names)
+                if res.enabled:
+                    # Affiche les NOMS des doctypes manquants (pas les ids).
+                    missing_names = [doctype_names.get(d, d) for d in res.missing_required]
+                    completeness = {
+                        "complete": res.complete,
+                        "required_total": res.required_total,
+                        "required_present": res.required_present,
+                        "missing_required": missing_names,
+                        "overridden": bool(getattr(tx, "completeness_override", False)),
+                    }
+
             transactions.append(
                 {
                     "id": tx.id,
@@ -139,6 +162,7 @@ def index():
                     "is_working": status == "WORKING",
                     "is_stuck": is_stuck,
                     "validation": validation_summary(docs),
+                    "completeness": completeness,
                 }
             )
     return render_template(
@@ -218,6 +242,27 @@ def retry(tx_id: str):
     return redirect(url_for("transactions.index"))
 
 
+@transactions_bp.route("/<tx_id>/unlock-completeness", methods=["POST"])
+@admin_required
+def unlock_completeness(tx_id: str):
+    """Débloque manuellement une transaction incomplète (autorise l'export).
+
+    Pose completeness_override=True : l'export ne sera plus bloqué par le contrôle
+    de complétude, même s'il manque une pièce obligatoire. Action d'un opérateur
+    qui assume le dossier incomplet.
+    """
+    from alambic_core.models import Transaction
+
+    with _session() as s:
+        tx = s.get(Transaction, tx_id)
+        if tx is None:
+            abort(404)
+        tx.completeness_override = True
+        s.commit()
+        flash("Dossier débloqué : l'export est désormais autorisé.", "success")
+    return redirect(url_for("transactions.index"))
+
+
 @transactions_bp.route("/<tx_id>/delete", methods=["POST"])
 @admin_required
 def delete(tx_id: str):
@@ -239,9 +284,24 @@ def delete(tx_id: str):
             for (st,) in s.query(Document.status).filter(Document.transaction_id == tx_id).all()
         ]
         status = compute_transaction_status(tx.status, doc_statuses)
+        # Une transaction bloquée (WORKING mais figée depuis >10 min) est
+        # supprimable : elle ne progresse plus. Seule une transaction qui
+        # travaille réellement (mise à jour récente) est protégée.
+        from datetime import datetime, timedelta
 
-    # Garde : pas de suppression d'une transaction en cours.
-    if status == "WORKING":
+        now = datetime.now(UTC)
+        updated = tx.updated_at
+        if updated is not None and updated.tzinfo is None:
+            updated = updated.replace(tzinfo=UTC)
+        is_stuck = (
+            status == "WORKING"
+            and updated is not None
+            and (now - updated) > timedelta(minutes=10)
+        )
+
+    # Garde : pas de suppression d'une transaction réellement en cours
+    # (en cours ET pas bloquée).
+    if status == "WORKING" and not is_stuck:
         flash("Impossible de supprimer une transaction en cours.", "error")
         return redirect(url_for("transactions.index"))
 
@@ -287,7 +347,7 @@ def documents(tx_id: str):
             .all()
         )
         docs = [{"id": d.id, "doctype": d.doctype, "status": d.status} for d in rows]
-    return render_template("transactions/_documents.html", documents=docs, error=None)
+    return render_template("transactions/_documents.html", documents=docs, error=None, tx_id=tx_id)
 
 
 @transactions_bp.route("/upload", methods=["POST"])
@@ -470,7 +530,22 @@ def document_validate(doc_id: str):
         if not ok:
             abort(404)
         s.commit()
-    return jsonify({"document_id": doc_id, "status": "VALIDATED"})
+
+    # Déclenche l'export en asynchrone (web service ou S3), si configuré.
+    # L'export ne bloque pas la réponse : un worker s'en charge.
+    exported = False
+    try:
+        from alambic_workers.orchestration.processing import export_document_task
+
+        export_document_task.apply_async(args=[doc_id], queue="normal")
+        exported = True
+    except Exception as exc:  # noqa: BLE001
+        # L'absence de broker (ou autre) ne doit pas faire échouer la validation.
+        from flask import current_app
+
+        current_app.logger.warning("Export non déclenché pour %s : %s", doc_id, exc)
+
+    return jsonify({"document_id": doc_id, "status": "VALIDATED", "export_queued": exported})
 
 
 @transactions_bp.route("/documents/<doc_id>/save", methods=["POST"])
@@ -494,3 +569,62 @@ def document_save(doc_id: str):
         written = save_indexes(s, doc_id, indexes)
         s.commit()
     return jsonify({"document_id": doc_id, "saved": written})
+
+
+@transactions_bp.route("/<tx_id>/validation-list")
+@admin_required
+def validation_list(tx_id: str):
+    """Liste JSON des documents d'une transaction pour le volet de validation.
+
+    Renvoie tous les documents 'finaux' (hors DEPRECATED/DISCARDED) avec leur
+    état, pour alimenter le volet gauche de l'écran de validation. Marque chaque
+    document comme validable ou non, et signale s'il est en attente.
+    """
+    from alambic_core.domain.enums import DocumentStatus
+    from alambic_core.models import Document, Transaction
+
+    pending_states = {
+        DocumentStatus.PENDING_VALIDATION.value,
+        DocumentStatus.DATA_EXTRACTED_AI.value,
+    }
+    done_states = {DocumentStatus.VALIDATED.value, DocumentStatus.EXPORTED.value}
+    error_states = {DocumentStatus.FAILED.value}
+
+    with _session() as s:
+        tx = s.get(Transaction, tx_id)
+        if tx is None:
+            abort(404)
+        if not current_user.is_super_admin and tx.account_id != current_user.account_id:
+            abort(403)
+
+        rows = (
+            s.query(Document)
+            .filter(Document.transaction_id == tx_id)
+            .filter(
+                Document.status.notin_(
+                    [DocumentStatus.DEPRECATED.value, DocumentStatus.DISCARDED.value]
+                )
+            )
+            .order_by(Document.id)
+            .all()
+        )
+        docs = []
+        for d in rows:
+            if d.status in done_states:
+                state = "validated"
+            elif d.status in error_states:
+                state = "error"
+            elif d.status in pending_states:
+                state = "pending"
+            else:
+                state = "other"
+            docs.append(
+                {
+                    "id": d.id,
+                    "doctype": d.doctype or "—",
+                    "status": d.status,
+                    "state": state,
+                    "validatable": d.status in pending_states or d.status in done_states,
+                }
+            )
+    return jsonify({"transaction_id": tx_id, "documents": docs})

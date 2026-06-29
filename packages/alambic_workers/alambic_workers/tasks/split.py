@@ -26,16 +26,35 @@ PROCESS_SPLIT = "DOC_SPLITTER"
 
 
 def _doctype_fields(config_id: str | None) -> list[dict]:
-    """Champs du doctype de la config (pour les séparateurs), ou []."""
-    if not config_id:
-        return []
+    """Champs du doctype pour le découpage — uniquement si UN SEUL doctype attendu.
+
+    Règle métier : le découpage par séparateur (champ is_separator) compare la
+    valeur d'un champ d'une page à l'autre pour détecter une frontière entre
+    documents. Cela suppose que toutes les pages partagent le même schéma, donc
+    le même doctype.
+
+    - Un seul doctype attendu → on peut découper plusieurs instances du même type
+      (ex. 5 factures séparées par un is_separator). On renvoie ses champs.
+    - Plusieurs doctypes attendus → le découpage par séparateur n'a pas de sens
+      (quel is_separator de quel type ?). On renvoie [] : pas de séparateur.
+    """
     import json
 
+    from alambic_core.services.completeness import doctype_ids_from_expected
+
+    if not config_id:
+        return []
     with session_scope() as s:
         config = s.get(Config, config_id)
-        if config is None or not config.doctype_id:
+        if config is None:
             return []
-        doctype = s.get(Doctype, config.doctype_id)
+        doctype_ids = doctype_ids_from_expected(config) or (
+            [config.doctype_id] if config.doctype_id else []
+        )
+        # Découpage par séparateur réservé au cas mono-doctype.
+        if len(doctype_ids) != 1:
+            return []
+        doctype = s.get(Doctype, doctype_ids[0])
         if doctype is None or not doctype.json_content:
             return []
         try:

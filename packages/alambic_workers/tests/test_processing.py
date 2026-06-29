@@ -188,3 +188,31 @@ def test_convert_real_conversion(core_db):
     nxt.assert_called_once()
     with core_db() as s:
         assert s.get(Document, "d1").status == "CONVERTED_TO_PDF"
+
+
+def test_classify_retries_on_transient_error():
+    """Une panne LLM transitoire déclenche un retry Celery, pas l'extraction."""
+    from alambic_core.pipeline.step import TransientStepError
+
+    from alambic_workers.orchestration import processing as P
+
+    extract_called = []
+
+    class _Retry(Exception):
+        pass
+
+    with (
+        patch(
+            "alambic_workers.tasks.classify.classify_document",
+            side_effect=TransientStepError("EdenAI 401"),
+        ),
+        patch.object(
+            P.extract_fields, "apply_async", side_effect=lambda *a, **k: extract_called.append(1)
+        ),
+        patch.object(P.classify, "retry", side_effect=_Retry()),
+    ):
+        with pytest.raises(_Retry):
+            P.classify.run(_payload())
+
+    # L'extraction ne doit PAS avoir été enchaînée (le doc n'est pas classifié).
+    assert extract_called == []

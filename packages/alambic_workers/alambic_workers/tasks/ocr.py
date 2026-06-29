@@ -13,40 +13,17 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
-from datetime import UTC, datetime
 
 from alambic_core import storage
 from alambic_core.ai.edenai_ocr import DocumentOcr, ocr_config_from_config
 from alambic_core.ai.pdf_extractor import PdfExtractor
 from alambic_core.db.session import session_scope
-from alambic_core.models import Config, Cost, Document
+from alambic_core.models import Config, Document
 from alambic_core.pipeline.step import step
 
 logger = logging.getLogger(__name__)
 
 PROCESS_OCR = "OCR_READER"
-
-
-def _persist_cost(tx_id, doc_id, account_id, provider, model, amount) -> None:
-    """Écrit une ligne de coût OCR (rattachée transaction + document)."""
-    if not amount:
-        return
-    now = datetime.now(UTC)
-    with session_scope() as s:
-        s.add(
-            Cost(
-                account_id=account_id or None,
-                transaction_id=tx_id,
-                document_id=doc_id,
-                amount=amount,
-                provider=provider or "",
-                model=model or "",
-                process="OCR",
-                details=f"{provider}/{model}",
-                month=f"{now.month:02d}",
-                year=str(now.year),
-            )
-        )
 
 
 def read_ocr_document(payload: dict) -> dict:
@@ -97,18 +74,20 @@ def read_ocr_document(payload: dict) -> dict:
                 d.ocr_markdown = markdown
                 d.ocr_lines = ocr_json.get("pages", [])
 
-        # Trace du coût (best-effort : ne casse pas l'étape).
-        try:
-            _persist_cost(
-                tx_id,
-                doc_id,
-                account_id,
-                extractor.provider,
-                extractor.model,
-                extractor.total_cost,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("OCR : coût non enregistré : %s", exc)
+        # Trace du coût : TOUJOURS écrite (même à 0), avec le nombre de pages
+        # pour calculer un coût unitaire par page.
+        from alambic_core.services.cost_tracking import record_cost
+
+        record_cost(
+            process="OCR",
+            amount=extractor.total_cost,
+            transaction_id=tx_id,
+            document_id=doc_id,
+            account_id=account_id,
+            provider=extractor.provider,
+            model=extractor.model,
+            pages=extractor.page_count,
+        )
 
         payload["ocr"] = {
             "pages": extractor.page_count,

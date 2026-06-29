@@ -3,7 +3,7 @@
 {% elif documents %}
   <table class="doc-table">
     <thead>
-      <tr><th>ID</th><th>Type</th><th>État</th></tr>
+      <tr><th>ID</th><th>Type</th><th>État</th><th></th></tr>
     </thead>
     <tbody>
       {% for d in documents %}
@@ -11,6 +11,13 @@
         <td class="mono">{{ d.id }}</td>
         <td>{{ d.doctype }}</td>
         <td><span class="doc-badge doc-badge-{{ d.status|lower }}">{{ d.status }}</span></td>
+        <td>
+          {% if d.status in ("PENDING_VALIDATION", "DATA_EXTRACTED_AI", "VALIDATED", "EXPORTED") %}
+            <button type="button" class="doc-validate-btn" onclick="openValidation('{{ tx_id }}', '{{ d.id }}')">
+              {{ "Revoir" if d.status in ("VALIDATED", "EXPORTED") else "Valider" }}
+            </button>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>

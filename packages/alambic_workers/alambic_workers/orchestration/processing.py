@@ -156,12 +156,27 @@ def detect_split(self, payload: dict) -> dict:
 # -- Etape : CLASSIFICATION IA [A VENIR - brique G, partie classif] ----------
 @app.task(name="alambic_workers.processing.classify", bind=True, acks_late=True)
 def classify(self, payload: dict) -> dict:
-    """Classe le document (cascade lexical→embedding→LLM), puis enchaîne l'extraction."""
+    """Classe le document (cascade lexical→embedding→LLM), puis enchaîne l'extraction.
+
+    Sur panne externe transitoire (LLM/EdenAI injoignable : auth, rate-limit,
+    5xx, timeout), la classification est relancée automatiquement avec backoff
+    plutôt que de faire tomber le document en échec.
+    """
+    from alambic_core.pipeline.step import TransientStepError
+
     from alambic_workers.tasks.classify import classify_document
 
     if not _document_active(payload):
         return payload
-    payload = classify_document(payload)
+    try:
+        payload = classify_document(payload)
+    except TransientStepError as exc:
+        # Backoff exponentiel plafonné : 60s, 120s, 240s… max 10 tentatives.
+        delay = min(60 * (2**self.request.retries), 3600)
+        logger.warning(
+            "Classification reportée (panne externe), retry dans %ds : %s", delay, exc
+        )
+        raise self.retry(exc=exc, countdown=delay, max_retries=10) from exc
     extract_fields.apply_async(args=[payload], queue="extract")
     return payload
 
@@ -185,12 +200,43 @@ def extract_fields(self, payload: dict) -> dict:
 # -- Etape : VALIDATION / EXPORT [A VENIR] -----------------------------------
 @app.task(name="alambic_workers.processing.finalize", bind=True, acks_late=True)
 def finalize(self, payload: dict) -> dict:
-    """Validation puis export. Posera status=EXPORTED + exported_at. [À VENIR]
+    """Étape terminale après extraction.
 
-    Étape terminale : déclenchera la rétention (via exported_at). Pas de suite.
+    Si le document a été validé automatiquement (auto-validation : need_validation
+    désactivé et tous les champs au-dessus du seuil), on déclenche l'export. S'il
+    attend une validation humaine (PENDING_VALIDATION), on ne fait rien : l'export
+    sera déclenché par l'opérateur lors de la validation.
     """
     if not _document_active(payload):
         return payload
     doc_id = (payload.get("document") or {}).get("documentId")
-    logger.info("Traitement terminé pour le document %s", doc_id)
+
+    # L'export n'est lancé que si le document est déjà VALIDATED (auto-validé).
+    from alambic_core.db.session import session_scope
+    from alambic_core.domain.enums import DocumentStatus
+    from alambic_core.models import Document
+
+    auto_validated = False
+    with session_scope() as s:
+        doc = s.get(Document, doc_id) if doc_id else None
+        if doc is not None and doc.status == DocumentStatus.VALIDATED.value:
+            auto_validated = True
+
+    if auto_validated:
+        logger.info("Document %s auto-validé → déclenchement de l'export", doc_id)
+        export_document_task.apply_async(args=[doc_id], queue="normal")
+    else:
+        logger.info("Traitement terminé pour le document %s (en attente de validation)", doc_id)
     return payload
+
+
+@app.task(name="alambic_workers.processing.export_document", bind=True, acks_late=True)
+def export_document_task(self, doc_id: str) -> dict:
+    """Exporte un document validé (web service ou S3 sortant).
+
+    Déclenchée après la validation humaine. Asynchrone : l'export peut être lent
+    (réseau), il ne doit pas bloquer l'UI.
+    """
+    from alambic_workers.tasks.export import export_document
+
+    return export_document(doc_id)

@@ -38,7 +38,7 @@ _BCR_TYPES = [
 
 # N'inclut QUE les attributs réellement lus par le moteur d'extraction
 # (fcl_field_extractor) ou utiles à l'opérateur. Les attributs morts du format
-# historique (field_format, block_search, priority) ont été retirés.
+# historique (field_format, block_search, priority, is_hidden) ont été retirés.
 FIELD_SPEC: list[tuple[str, str, str, str, list[str] | None]] = [
     ("field_name", "Nom du champ", "essentiel", "text", None),
     (
@@ -66,12 +66,11 @@ FIELD_SPEC: list[tuple[str, str, str, str, list[str] | None]] = [
     ("bcr_type", "Code-barres", "avance", "select", _BCR_TYPES),
     ("default_value", "Valeur par défaut", "avance", "text", None),
     ("black_words", "Mots exclus", "avance", "text", None),
-    ("strategy", "Stratégie", "avance", "text", None),
-    ("is_hidden", "Masqué", "avance", "checkbox", None),
+    ("strategy", "Stratégie", "avance", "select", ["", "mrz"]),
 ]
 
 # Attributs stockés en 0/1 dans le JSON, présentés comme cases à cocher.
-BOOL_KEYS = {"required", "is_separator", "is_hidden", "use_ia"}
+BOOL_KEYS = {"required", "is_separator", "use_ia"}
 
 _KEYS = [k for k, _, _, _, _ in FIELD_SPEC]
 _ESSENTIAL = [k for k, _, cat, _, _ in FIELD_SPEC if cat == "essentiel"]

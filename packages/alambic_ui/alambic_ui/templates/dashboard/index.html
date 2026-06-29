@@ -91,7 +91,42 @@
     border-bottom: 1px solid var(--slate-100);
   }
   .dash-table td { padding: 10px 18px; border-bottom: 1px solid var(--slate-50); }
-  .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; font-size: 13px; }
+  .mono { font-variant-numeric: tabular-nums; font-size: 13px; }
+  .proj-detail {
+    margin: 16px 0 8px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--slate-500);
+  }
+  .proj-list {
+    list-style: none;
+    margin: 0 0 4px;
+    padding: 0;
+  }
+  .proj-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 0;
+    font-size: 14px;
+    color: var(--slate-600);
+    border-bottom: 1px solid var(--slate-50);
+  }
+  .proj-list li:last-child { border-bottom: none; }
+  .proj-list li::after {
+    content: attr(data-cost);
+    font-weight: 600;
+    color: var(--navy);
+    font-variant-numeric: tabular-nums;
+  }
+  .proj-note {
+    margin: 12px 0 0;
+    font-size: 12.5px;
+    color: var(--slate-400);
+    line-height: 1.5;
+  }
   .empty-hint { padding: 24px 18px; color: var(--slate-400); font-size: 14px; text-align: center; }
 </style>
 {% endblock %}
@@ -163,6 +198,45 @@
         {% endfor %}
       {% else %}
         <div class="empty-hint">Aucun coût enregistré pour le moment.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ─── Projection du coût mensuel selon le volume ─────────────────── #}
+  <div class="panel">
+    <div class="panel-head">Projection du coût mensuel</div>
+    <div class="panel-body">
+      {% if projection.sample_docs %}
+        <p class="proj-basis">
+          Base : {{ projection.sample_docs }} document(s) traité(s) pour
+          {{ "%.4f"|format(projection.sample_total) }} €
+          → <strong>{{ "%.5f"|format(projection.cost_per_doc) }} € / document</strong>
+        </p>
+        <table class="dash-table">
+          <thead><tr><th>Volume / mois</th><th>Coût estimé</th></tr></thead>
+          <tbody>
+            {% for row in projection.projection %}
+            <tr>
+              <td>{{ "{:,}".format(row.volume).replace(",", " ") }} docs</td>
+              <td class="mono">{{ "%.2f"|format(row.monthly_cost) }} €</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if projection.per_process_avg %}
+        <p class="proj-detail">Coût moyen par document et par étape :</p>
+        <ul class="proj-list">
+          {% for process, avg in projection.per_process_avg.items() %}
+          <li data-cost="{{ "%.5f"|format(avg) }} €">{{ process }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        <p class="proj-note">
+          Estimation linéaire fondée sur les coûts réels déjà observés. Elle s'affine
+          à mesure que le volume traité augmente.
+        </p>
+      {% else %}
+        <div class="empty-hint">Pas encore assez de données pour projeter. Traitez quelques documents.</div>
       {% endif %}
     </div>
   </div>

@@ -90,6 +90,25 @@ app.conf.update(
             "task": "alambic_workers.retention.purge",
             "schedule": crontab(hour=3, minute=0),
         },
+        # Rattrapage des exports en attente (échecs transitoires, configurations
+        # tardives). Plus réactif que la rétention : un document validé ne doit
+        # pas attendre longtemps. La Config est relue à chaque passage.
+        "balayage-exports-en-attente": {
+            "task": "alambic_workers.export.sweep",
+            "schedule": crontab(minute="*/15"),
+        },
+        # Voiture-balai : supprime les dossiers Garage orphelins (transactions
+        # disparues de la base). Ménage de fond, hebdomadaire, nuit du dimanche.
+        "voiture-balai-garage": {
+            "task": "alambic_workers.storage.orphan_sweep",
+            "schedule": crontab(hour=4, minute=0, day_of_week=0),
+        },
+        # Compaction vectorielle : agrège les embeddings des documents validés en
+        # centroïdes de classification (apprentissage incrémental). Horaire.
+        "compaction-vectorielle": {
+            "task": "alambic_workers.vectors.compact",
+            "schedule": crontab(minute=0),
+        },
     },
 )
 

@@ -122,15 +122,33 @@
         </div>
         <div class="form-row">
           <div class="form-group">{{ form.account_id.label }} {{ form.account_id(class="form-control", id="account-select") }}</div>
-          <div class="form-group">{{ form.doctype_id.label }} {{ form.doctype_id(class="form-control", id="doctype-select") }}</div>
         </div>
         <div class="form-group"><div class="form-check">{{ form.need_validation() }} {{ form.need_validation.label }}</div></div>
         <div class="form-group"><div class="form-check">{{ form.multi_doc_detect() }} {{ form.multi_doc_detect.label }}</div></div>
         {{ slider('auto_validation_threshold', 'Seuil de validation auto') }}
-        {{ chk('completeness_check', 'Contrôle de complétude') }}
+        <div class="form-group" id="expected-doctypes-group" style="grid-column:1/-1;">
+          <label>Doctypes attendus</label>
+          <div class="edt-callout">
+            <strong>Comment ça marche</strong>
+            <ul>
+              <li><b>Classification</b> — la liste définit les types que cette configuration sait reconnaître. Chaque document reçu est rangé dans l'un d'eux.</li>
+              <li><b>Obligatoire / optionnel</b> — marquez « obligatoire » les pièces qui doivent figurer dans un dossier. Le <b>contrôle de complétude s'active tout seul</b> dès qu'au moins un type est obligatoire : l'export est bloqué tant qu'une pièce obligatoire manque (déblocage manuel possible).</li>
+              <li><b>Découpage automatique</b> — un PDF contenant plusieurs documents collés ne peut être découpé que si <b>un seul type</b> est sélectionné (ex. plusieurs factures à la suite). Avec plusieurs types, le découpage par séparateur est désactivé.</li>
+            </ul>
+          </div>
+          <div class="form-hint">Cochez les types attendus, puis indiquez lesquels sont obligatoires.</div>
+          <div id="expected-doctypes-list" class="expected-doctypes-list">
+            <!-- peuplé en JS depuis les doctypes du compte -->
+            <div class="edt-empty">Sélectionnez d'abord un compte pour voir ses doctypes.</div>
+          </div>
+          <div id="edt-status" class="edt-status"><!-- indication dynamique selon la sélection --></div>
+          <input type="hidden" name="expected_doctypes" id="expected-doctypes-input"
+                 value="{{ values.get('expected_doctypes', '[]') }}">
+        </div>
+        <div class="form-group"><div class="form-check">{{ chk('classifier_let_it_guess', 'Laisser deviner un type hors liste') }}</div></div>
+        <div class="form-hint" style="margin-top:-8px;">Si activé, la classification peut proposer un type absent de la liste quand sa confiance dépasse le seuil. Sinon, un document non reconnu (sous le seuil) est marqué « non reconnu » pour classement manuel.</div>
         {{ txt('filter_extensions', 'Extensions filtrées') }}
         {{ num('fixed_page', 'Page fixe', mn=0) }}
-        {{ num('multi_doc_max_workers', 'Workers multi-doc', mn=1) }}
         {{ num('pdf_max_pages', 'Pages PDF max', mn=0) }}
       </div>
 
@@ -153,7 +171,6 @@
         {{ provider_select('classifier_provider', 'Provider', 'classifier_model', '', 'classifier') }}
         {{ model_select('classifier_model', 'Modèle', 'classifier_provider', 'classifier') }}
         {{ slider('classifier_confidence_level', 'Seuil de confiance') }}
-        {{ chk('classifier_let_it_guess', 'Laisser deviner') }}
         {{ provider_select('fallback_classifier_provider', 'Provider (fallback)', 'fallback_classifier_model', 'classifier_provider', 'classifier') }}
         {{ model_select('fallback_classifier_model', 'Modèle (fallback)', 'fallback_classifier_provider', 'classifier') }}
         <div class="form-section-title">Extraction</div>
@@ -296,7 +313,6 @@
 
   // Filtrage dynamique des doctypes selon le compte
   var accountSel = document.getElementById('account-select');
-  var doctypeSel = document.getElementById('doctype-select');
   // Catalogue AI par feature (providers + modèles avec régions) injecté par le backend.
   var AI_CATALOG = {{ ai_catalog | tojson }};
   var ALL_REGIONS = AI_CATALOG.regions || ['eu', 'global'];
@@ -418,25 +434,122 @@
   enrichEdenai();
 
   function onAccountChange(accId) {
-    // 1. Filtrer les doctypes selon le compte
-    if (doctypeSel) {
-      var current = doctypeSel.value;
-      fetch('{{ url_for("configs.doctypes_for_account") }}?account_id=' + encodeURIComponent(accId))
-        .then(r => r.json())
-        .then(res => {
-          doctypeSel.innerHTML = '<option value="">— Aucun —</option>';
-          (res.doctypes || []).forEach(function(d) {
-            doctypeSel.add(new Option(d.name, d.id, false, d.id === current));
-          });
-        }).catch(function() {});
-    }
-    // 2. Hint clé EdenAI du compte
+    // 1. Hint clé EdenAI du compte
     fetch('{{ url_for("configs.account_edenai") }}?account_id=' + encodeURIComponent(accId))
       .then(r => r.json())
       .then(res => {
         var hint = document.getElementById('edenai-account-hint');
         if (hint) hint.style.display = res.has_account_key ? 'block' : 'none';
       }).catch(function() {});
+    // 3. Liste des doctypes attendus (complétude)
+    renderExpectedDoctypes(accId);
+  }
+
+  // ── Doctypes attendus (complétude) ───────────────────────────────────────
+  var edtInput = document.getElementById('expected-doctypes-input');
+  var edtList = document.getElementById('expected-doctypes-list');
+
+  function readExpectedState() {
+    // Map doctype_id -> {checked, required} depuis le champ caché (JSON).
+    var map = {};
+    try {
+      (JSON.parse(edtInput.value || '[]') || []).forEach(function(e) {
+        if (e && e.doctype_id) map[String(e.doctype_id)] = { required: e.required !== false };
+      });
+    } catch (err) {}
+    return map;
+  }
+
+  function writeExpectedState() {
+    // Sérialise l'état de la liste vers le champ caché.
+    var out = [];
+    edtList.querySelectorAll('.edt-row').forEach(function(row) {
+      var chk = row.querySelector('.edt-check');
+      if (chk && chk.checked) {
+        var req = row.querySelector('.edt-req');
+        out.push({ doctype_id: row.getAttribute('data-id'), required: !!(req && req.checked) });
+      }
+    });
+    edtInput.value = JSON.stringify(out);
+    updateExpectedStatus(out);
+  }
+
+  function updateExpectedStatus(entries) {
+    // Indication dynamique : reflète les conséquences de la sélection courante.
+    var statusEl = document.getElementById('edt-status');
+    if (!statusEl) return;
+    var n = entries.length;
+    var nbRequired = entries.filter(function(e) { return e.required; }).length;
+    if (n === 0) {
+      statusEl.className = 'edt-status edt-status-warn';
+      statusEl.innerHTML = '⚠ Aucun type sélectionné : la classification n\'aura aucune cible. ' +
+        'Activez « Laisser deviner » pour que le système propose un type, sinon les documents seront « non reconnus ».';
+      return;
+    }
+    var parts = [];
+    // Découpage mono/multi
+    if (n === 1) {
+      parts.push('Un seul type : le <b>découpage</b> d\'un PDF multi-documents (séparateur) est <b>possible</b>.');
+    } else {
+      parts.push(n + ' types : le <b>découpage par séparateur est désactivé</b> (il ne s\'applique qu\'à un seul type).');
+    }
+    // Complétude
+    if (nbRequired > 0) {
+      parts.push('Contrôle de complétude <b>actif</b> (' + nbRequired + ' type' + (nbRequired > 1 ? 's' : '') +
+        ' obligatoire' + (nbRequired > 1 ? 's' : '') + ') : l\'export sera bloqué si une pièce obligatoire manque.');
+    } else {
+      parts.push('Aucun type obligatoire : <b>pas de contrôle de complétude</b>.');
+    }
+    statusEl.className = 'edt-status edt-status-info';
+    statusEl.innerHTML = parts.join('<br>');
+  }
+
+  function renderExpectedDoctypes(accId) {
+    if (!edtList) return;
+    var state = readExpectedState();
+    fetch('{{ url_for("configs.doctypes_for_account") }}?account_id=' + encodeURIComponent(accId || ''))
+      .then(r => r.json())
+      .then(res => {
+        var docs = res.doctypes || [];
+        if (!docs.length) {
+          edtList.innerHTML = '<div class="edt-empty">Aucun doctype disponible pour ce compte.</div>';
+          return;
+        }
+        edtList.innerHTML = '';
+        docs.forEach(function(d) {
+          var st = state[d.id] || null;
+          var checked = !!st;
+          var required = st ? st.required : true;
+          var row = document.createElement('div');
+          row.className = 'edt-row' + (checked ? ' edt-checked' : '');
+          row.setAttribute('data-id', d.id);
+          row.innerHTML =
+            '<label class="edt-name"><input type="checkbox" class="edt-check" ' +
+            (checked ? 'checked' : '') + '> ' + escapeHtml(d.name) + '</label>' +
+            '<label class="edt-required' + (checked ? '' : ' edt-disabled') + '">' +
+            '<input type="checkbox" class="edt-req" ' + (required ? 'checked' : '') + '> obligatoire</label>';
+          edtList.appendChild(row);
+
+          var chk = row.querySelector('.edt-check');
+          var req = row.querySelector('.edt-req');
+          var reqLabel = row.querySelector('.edt-required');
+          chk.addEventListener('change', function() {
+            row.classList.toggle('edt-checked', chk.checked);
+            reqLabel.classList.toggle('edt-disabled', !chk.checked);
+            writeExpectedState();
+          });
+          req.addEventListener('change', writeExpectedState);
+        });
+        writeExpectedState();
+      }).catch(function() {
+        edtList.innerHTML = '<div class="edt-empty">Erreur de chargement des doctypes.</div>';
+      });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function(c) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
   }
 
   if (accountSel) {

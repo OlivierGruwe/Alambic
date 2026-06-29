@@ -509,3 +509,74 @@ tbody tr:hover { background: var(--slate-50); }
 @media (prefers-reduced-motion: reduce) {
   .sidebar, .sidebar-overlay { transition: none; }
 }
+
+/* ── Doctypes attendus (complétude) ──────────────────────────────────────── */
+.expected-doctypes-list {
+  margin-top: 8px;
+  border: 1px solid var(--slate-200);
+  border-radius: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.edt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--slate-100);
+}
+.edt-row:last-child { border-bottom: none; }
+.edt-row .edt-name { flex: 1; font-size: 14px; }
+.edt-row .edt-required {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--slate-500);
+}
+.edt-row.edt-checked { background: var(--slate-50); }
+.edt-row .edt-required.edt-disabled { opacity: 0.4; pointer-events: none; }
+.edt-empty { padding: 14px; font-size: 13px; color: var(--slate-400); text-align: center; }
+.edt-badge {
+  font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+}
+.edt-badge-required { background: #fde8e8; color: #c0392b; }
+.edt-badge-optional { background: var(--slate-100); color: var(--slate-500); }
+
+/* ── Config inactive (grisée) ────────────────────────────────────────────── */
+.badge-muted { background: var(--slate-100); color: var(--slate-500); }
+tr.config-inactive { opacity: 0.55; }
+tr.config-inactive strong { font-weight: 500; }
+
+/* ── Aide pédagogique des doctypes attendus ──────────────────────────────── */
+.edt-callout {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-left: 3px solid var(--primary-500, #4f46e5);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 8px 0 12px;
+  font-size: 13px;
+  color: var(--slate-600);
+}
+.edt-callout strong { display: block; margin-bottom: 6px; color: var(--slate-700); }
+.edt-callout ul { margin: 0; padding-left: 18px; }
+.edt-callout li { margin: 4px 0; line-height: 1.45; }
+.edt-status {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.edt-status:empty { display: none; }
+.edt-status-info { background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; }
+.edt-status-warn { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+
+/* ── Indicateur de complétude (liste transactions) ───────────────────────── */
+.cpl { font-size: 12px; white-space: nowrap; }
+.cpl-ok { color: var(--success-600, #059669); font-weight: 600; }
+.cpl-missing { color: #b45309; }
+.cpl-missing .cpl-detail { display: block; font-size: 10.5px; color: #92400e; opacity: 0.85; }
+.cpl-override { color: var(--slate-500, #64748b); font-style: italic; }
+.act-unlock { color: #b45309; }

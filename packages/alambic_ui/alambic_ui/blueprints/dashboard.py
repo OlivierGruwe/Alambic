@@ -106,6 +106,49 @@ def _costs(s) -> dict:
     }
 
 
+def _cost_projection(s) -> dict:
+    """Projection du coût mensuel selon le volume, à partir des coûts réels.
+
+    Calcule le coût moyen par document à partir des coûts déjà enregistrés et du
+    nombre de documents distincts ayant consommé de l'IA, puis projette ce coût
+    unitaire sur des volumes mensuels types. Donne aussi le détail du coût moyen
+    par étape (OCR, classification, extraction), pour voir quel poste pèse.
+    """
+    base = _scope_account(s.query(Cost), Cost)
+    total = float(base.with_entities(func.coalesce(func.sum(Cost.amount), 0)).scalar() or 0)
+
+    # Nombre de documents distincts ayant au moins une ligne de coût (= traités par l'IA).
+    doc_count = (
+        _scope_account(s.query(func.count(func.distinct(Cost.document_id))), Cost).scalar() or 0
+    )
+
+    cost_per_doc = (total / doc_count) if doc_count else 0.0
+
+    # Coût moyen par document, ventilé par étape (process).
+    per_process_avg = {}
+    if doc_count:
+        for process, amount in (
+            _scope_account(s.query(Cost.process, func.sum(Cost.amount)), Cost)
+            .group_by(Cost.process)
+            .all()
+        ):
+            per_process_avg[process or "?"] = float(amount or 0) / doc_count
+
+    # Projection sur des volumes mensuels types.
+    volumes = [1000, 5000, 10000, 50000, 100000]
+    projection = [
+        {"volume": v, "monthly_cost": round(cost_per_doc * v, 2)} for v in volumes
+    ]
+
+    return {
+        "sample_docs": int(doc_count),
+        "sample_total": round(total, 4),
+        "cost_per_doc": round(cost_per_doc, 5),
+        "per_process_avg": {k: round(v, 5) for k, v in per_process_avg.items()},
+        "projection": projection,
+    }
+
+
 def _processing_times(s) -> list:
     """Durée moyenne (et nombre) par type d'étape, depuis TransactionStep."""
     rows = (
@@ -163,6 +206,7 @@ def index():
         context = {
             "volumes": _volumes(s),
             "costs": _costs(s),
+            "projection": _cost_projection(s),
             "processing_times": _processing_times(s),
             "recent": _recent_transactions(s),
         }

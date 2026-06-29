@@ -282,3 +282,46 @@ def delete_config(config_id: str):
         s.commit()
         flash("Configuration supprimée.", "success")
     return redirect(url_for("configs.list_configs"))
+
+
+@configs_bp.route("/<config_id>/duplicate", methods=["POST"])
+@admin_required
+def duplicate(config_id: str):
+    """Duplique une configuration (copie inactive, nom indexé)."""
+    from alambic_core.services.config_duplication import duplicate_config
+
+    # Vérifie le périmètre de l'admin avant de dupliquer.
+    with _session() as s:
+        cfg = s.get(Config, config_id)
+        if cfg is None:
+            abort(404)
+        if not current_user.is_super_admin and cfg.account_id != current_user.account_id:
+            flash("Accès refusé.", "error")
+            return redirect(url_for("configs.list_configs"))
+
+    new_id = duplicate_config(config_id)
+    if new_id is None:
+        flash("Duplication impossible.", "error")
+        return redirect(url_for("configs.list_configs"))
+    flash("Configuration dupliquée (inactive). Ajustez-la puis activez-la.", "success")
+    return redirect(url_for("configs.edit_config", config_id=new_id))
+
+
+@configs_bp.route("/<config_id>/toggle-active", methods=["POST"])
+@admin_required
+def toggle_active(config_id: str):
+    """Active ou désactive une configuration."""
+    with _session() as s:
+        cfg = s.get(Config, config_id)
+        if cfg is None:
+            abort(404)
+        if not current_user.is_super_admin and cfg.account_id != current_user.account_id:
+            flash("Accès refusé.", "error")
+            return redirect(url_for("configs.list_configs"))
+        cfg.is_active = not cfg.is_active
+        s.commit()
+        flash(
+            "Configuration activée." if cfg.is_active else "Configuration désactivée.",
+            "success",
+        )
+    return redirect(url_for("configs.list_configs"))

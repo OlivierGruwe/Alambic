@@ -13,12 +13,19 @@
 <div class="card">
   <table class="responsive-table">
     <thead>
-      <tr><th>Nom</th><th>Validation</th><th>Multi-doc</th><th></th></tr>
+      <tr><th>Nom</th><th>État</th><th>Validation</th><th>Multi-doc</th><th></th></tr>
     </thead>
     <tbody>
       {% for cfg in configs %}
-      <tr>
+      <tr class="{{ 'config-inactive' if not cfg.is_active }}">
         <td data-label="Nom"><strong>{{ cfg.config_name }}</strong></td>
+        <td data-label="État">
+          {% if cfg.is_active %}
+            <span class="badge badge-active">Active</span>
+          {% else %}
+            <span class="badge badge-muted">Inactive</span>
+          {% endif %}
+        </td>
         <td data-label="Validation">
           {% if cfg.need_validation %}
             <span class="badge badge-pending">Requise</span>
@@ -30,6 +37,16 @@
         <td data-label="Actions">
           <div class="row-actions">
             <a href="{{ url_for('configs.edit_config', config_id=cfg.id) }}" class="btn btn-secondary btn-sm">Éditer</a>
+            <form method="POST" action="{{ url_for('configs.duplicate', config_id=cfg.id) }}" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-ghost btn-sm" title="Créer une copie inactive">Dupliquer</button>
+            </form>
+            <form method="POST" action="{{ url_for('configs.toggle_active', config_id=cfg.id) }}" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-ghost btn-sm">
+                {{ 'Désactiver' if cfg.is_active else 'Activer' }}
+              </button>
+            </form>
             <form method="POST" action="{{ url_for('configs.delete_config', config_id=cfg.id) }}"
                   style="display:inline;"
                   onsubmit="return confirm('Supprimer la configuration {{ cfg.config_name }} ?');">

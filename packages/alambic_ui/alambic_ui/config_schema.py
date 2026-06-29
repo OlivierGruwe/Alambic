@@ -26,12 +26,11 @@ SIMPLE_BOOL = ["need_validation", "multi_doc_detect"]
 # ── Onglet GÉNÉRAL : bloc JSONB "general" ────────────────────────────────────
 GENERAL_KEYS = [
     "auto_validation_threshold",
-    "completeness_check",
+    "classifier_let_it_guess",
     "doctype_ids",
     "expected_doctype_ids",
     "filter_extensions",
     "fixed_page",
-    "multi_doc_max_workers",
     "pdf_max_pages",
 ]
 
@@ -50,7 +49,6 @@ EDENAI_KEYS = [
     "classifier_provider",
     "classifier_model",
     "classifier_confidence_level",
-    "classifier_let_it_guess",
     "classifier_max_chars",
     "classifier_max_pages",
     "fallback_classifier_provider",
@@ -177,7 +175,6 @@ SECRET_FORM_KEYS = {fk for mapping in SECRET_BLOCKS.values() for fk in mapping}
 
 # Clés booléennes (cases à cocher) au sein des blocs.
 BOOL_KEYS = {
-    "completeness_check",
     "classifier_let_it_guess",
     "ocr_treat_images",
     "export_verify_ssl",
@@ -205,6 +202,11 @@ def parse_config(config) -> dict:
     data["doctype_id"] = config.doctype_id or ""
     for k in SIMPLE_BOOL:
         data[k] = bool(getattr(config, k, False))
+
+    # Doctypes attendus (complétude) : sérialisés en JSON pour le JS du formulaire.
+    data["expected_doctypes"] = json.dumps(
+        getattr(config, "expected_doctypes", None) or [], ensure_ascii=False
+    )
 
     # Blocs JSONB
     general = config.general or {}
@@ -237,9 +239,15 @@ def apply_form_to_config(config, form_data) -> None:
     """
     # Champs simples
     config.config_name = (form_data.get("config_name") or "").strip()
-    config.doctype_id = (form_data.get("doctype_id") or "").strip()
+    # doctype_id n'est plus dans le formulaire (remplacé par expected_doctypes).
+    # On ne l'écrase plus : la valeur existante est conservée comme repli de
+    # compatibilité côté backend (split/barcode/extraction).
     for k in SIMPLE_BOOL:
         setattr(config, k, _checkbox(form_data, k))
+
+    # Doctypes attendus (complétude) : JSON [{doctype_id, required}] depuis le
+    # champ caché alimenté par le JS. Tolère vide/malformé → liste vide.
+    config.expected_doctypes = _parse_expected_doctypes(form_data.get("expected_doctypes"))
 
     # Blocs JSONB
     config.general = {k: _from_form(k, form_data.get(k)) for k in GENERAL_KEYS}
@@ -257,6 +265,32 @@ def apply_form_to_config(config, form_data) -> None:
                 changed = True
         if changed:
             setattr(config, col, json.dumps(existing, ensure_ascii=False))
+
+
+def _parse_expected_doctypes(raw) -> list:
+    """Parse le champ expected_doctypes du formulaire (JSON) en liste normalisée.
+
+    Format attendu : [{"doctype_id": "...", "required": true}, ...].
+    Tolère vide, JSON malformé, ou format partiel → renvoie une liste propre.
+    """
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    result = []
+    seen = set()
+    for item in data:
+        if isinstance(item, dict) and item.get("doctype_id"):
+            did = str(item["doctype_id"])
+            if did in seen:
+                continue
+            seen.add(did)
+            result.append({"doctype_id": did, "required": bool(item.get("required", True))})
+    return result
 
 
 def _load_secret(raw: str) -> dict:

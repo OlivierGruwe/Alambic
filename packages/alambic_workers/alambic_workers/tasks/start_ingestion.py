@@ -71,6 +71,29 @@ def _get_extension(filename: str) -> str:
     return ext if ext != filename else ""
 
 
+def _extension_allowed(config, filename: str) -> bool:
+    """Vrai si l'extension du fichier est autorisée par la config.
+
+    La config peut restreindre les types acceptés via general.filter_extensions
+    (liste séparée par virgules/espaces/points-virgules, ex. « pdf, jpg, png »).
+    Liste vide ou absente → toutes les extensions sont autorisées.
+    La comparaison est insensible à la casse et tolère un point en préfixe.
+    """
+    raw = (config.general or {}).get("filter_extensions", "") if config is not None else ""
+    raw = (raw or "").strip()
+    if not raw:
+        return True  # pas de restriction
+    allowed = {
+        part.strip().lstrip(".").lower()
+        for part in raw.replace(",", " ").replace(";", " ").split()
+        if part.strip()
+    }
+    if not allowed:
+        return True
+    ext = _get_extension(filename).lower()
+    return ext in allowed
+
+
 def start_ingestion(
     *,
     bucket: str,
@@ -105,6 +128,16 @@ def start_ingestion(
             if config.account_id != account_id:
                 raise InvalidInputError(
                     f"accountId ({account_id}) et configId ({config_id}) incohérents"
+                )
+            # Config inactive : on n'accepte plus de nouvelles transactions.
+            if not getattr(config, "is_active", True):
+                raise InvalidInputError(f"config inactive ({config_id})")
+            # Filtrage des extensions : si la config restreint les types de fichiers
+            # acceptés (general.filter_extensions), on refuse les autres.
+            if not _extension_allowed(config, filename):
+                allowed = (config.general or {}).get("filter_extensions", "")
+                raise InvalidInputError(
+                    f"extension non autorisée pour {filename} (autorisées : {allowed})"
                 )
 
             # Idempotence : transaction déjà créée pour cette clé → on skip.

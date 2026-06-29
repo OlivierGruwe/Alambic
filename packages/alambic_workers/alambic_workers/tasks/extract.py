@@ -17,11 +17,9 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, datetime
 
 from alambic_core.db.session import session_scope
-from alambic_core.domain.enums import DocumentStatus
-from alambic_core.models import Config, Cost, Doctype, Document, DocumentIndex
+from alambic_core.models import Config, Doctype, Document, DocumentIndex
 from alambic_core.services.extraction import (
     compute_extraction_summary,
     split_fields_by_strategy,
@@ -45,18 +43,39 @@ def _get_extractor(config):
     return _EXTRACTOR_CACHE[key]
 
 
-def _doctype_fields(config) -> tuple[list, str, str]:
-    """Champs + nom + description du doctype de la config.
+def _doctype_fields(config, doc_id: str) -> tuple[list, str, str]:
+    """Champs + nom + description du doctype RÉELLEMENT classifié pour ce document.
 
-    Lit doctype.json_content (JSON {fields, description}). Renvoie ([], "", "")
-    si pas de doctype.
+    Source de vérité : document.doctype (le type déterminé par la classification
+    pour CE document), résolu en Doctype dans le périmètre du compte de la config
+    (doctypes publics + ceux du compte). Repli sur config.doctype_id pour les
+    anciennes configs mono-doctype. Lit doctype.json_content (JSON {fields,
+    description}). Renvoie ([], "", "") si rien d'exploitable.
     """
-    if not config.doctype_id:
-        return [], "", ""
+    from sqlalchemy import or_
+
     with session_scope() as s:
-        dt = s.get(Doctype, config.doctype_id)
+        doc = s.get(Document, doc_id)
+        classified = (doc.doctype if doc is not None else "") or ""
+
+        dt = None
+        # 1. Résolution par le type classifié du document (par nom), dans le
+        #    périmètre du compte (publics + compte de la config).
+        if classified and classified != "unknown":
+            q = s.query(Doctype).filter(Doctype.doctype_name == classified)
+            if config.account_id:
+                q = q.filter(
+                    or_(Doctype.is_public.is_(True), Doctype.account_id == config.account_id)
+                )
+            dt = q.first()
+
+        # 2. Repli : ancien doctype_id de la config (compat mono-doctype).
+        if dt is None and getattr(config, "doctype_id", ""):
+            dt = s.get(Doctype, config.doctype_id)
+
         if dt is None:
             return [], "", ""
+
         name = dt.doctype_name or ""
         try:
             content = json.loads(dt.json_content or "{}")
@@ -114,14 +133,22 @@ def _run_conventional_pass(fields: list, doc, doc_id: str) -> list:
     return indexes
 
 
-def _persist_extraction(doc_id, tx_id, account_id, indexes, summary, cost_payload) -> None:
-    """Persiste le résumé sur le document, les index non-vides, et le coût LLM."""
-    now = datetime.now(UTC)
+def _persist_extraction(doc_id, tx_id, account_id, indexes, summary, config) -> None:
+    """Persiste le résumé sur le document et les index non-vides.
+
+    Décide aussi du statut de validation : VALIDATED (auto) ou PENDING_VALIDATION
+    (humain), selon need_validation et le seuil de confiance des champs.
+    """
+    from alambic_core.services.auto_validation import decide_validation_status
+
+    status = decide_validation_status(config, indexes)
     with session_scope() as s:
         doc = s.get(Document, doc_id)
         if doc is not None:
             doc.extraction_summary = summary
-            doc.status = DocumentStatus.DATA_EXTRACTED_AI.value
+            # Validation humaine (PENDING_VALIDATION) ou automatique (VALIDATED)
+            # selon need_validation et l'indice de confiance des champs extraits.
+            doc.status = status
             # Remplace les index extraits existants (réexécution idempotente).
             s.query(DocumentIndex).filter(
                 DocumentIndex.document_id == doc_id,
@@ -140,23 +167,6 @@ def _persist_extraction(doc_id, tx_id, account_id, indexes, summary, cost_payloa
                         index_desc=idx.get("index_desc", "") or "",
                     )
                 )
-
-        amount = float((cost_payload or {}).get("cost", 0) or 0)
-        if amount:
-            s.add(
-                Cost(
-                    account_id=account_id or None,
-                    transaction_id=tx_id,
-                    document_id=doc_id,
-                    amount=amount,
-                    provider=(cost_payload or {}).get("provider", "") or "",
-                    model=(cost_payload or {}).get("model", "") or "",
-                    process=PROCESS_EXTRACT,
-                    details="",
-                    month=f"{now.month:02d}",
-                    year=str(now.year),
-                )
-            )
 
 
 def _empty(value) -> bool:
@@ -184,7 +194,7 @@ def extract_document(payload: dict) -> dict:
                 payload["extraction"] = {"skipped": "no_config"}
                 return payload
 
-        fields, doctype_name, doctype_desc = _doctype_fields(config)
+        fields, doctype_name, doctype_desc = _doctype_fields(config, doc_id)
         if not fields:
             logger.info("Extraction sautée (doctype sans champs) pour %s", doc_id)
             payload["extraction"] = {"skipped": "no_fields"}
@@ -238,7 +248,21 @@ def extract_document(payload: dict) -> dict:
         all_indexes = list(merged.values())
 
         summary = compute_extraction_summary(all_indexes, fields)
-        _persist_extraction(doc_id, tx_id, account_id, all_indexes, summary, cost_payload)
+        _persist_extraction(doc_id, tx_id, account_id, all_indexes, summary, config)
+
+        # Trace du coût : TOUJOURS écrite (même à 0, ex. extraction 100% conventionnelle).
+        from alambic_core.services.cost_tracking import record_cost
+
+        record_cost(
+            process=PROCESS_EXTRACT,
+            amount=float((cost_payload or {}).get("cost", 0) or 0),
+            transaction_id=tx_id,
+            document_id=doc_id,
+            account_id=account_id,
+            provider=(cost_payload or {}).get("provider", "") or "",
+            model=(cost_payload or {}).get("model", "") or "",
+            details=f"{len(llm_fields)}_llm_{len(conventional_fields)}_conv",
+        )
 
         logger.info(
             "Extraction terminée %s : %d/%d champs, ok=%s",

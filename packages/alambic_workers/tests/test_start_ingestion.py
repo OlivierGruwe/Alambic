@@ -171,3 +171,27 @@ def test_start_ingestion_rejects_unknown_config(sessionmaker_fixture, tmp_path):
     with sessionmaker_fixture() as s:
         rejected = s.query(Transaction).filter(Transaction.status == "REJECTED").all()
     assert len(rejected) == 1
+
+
+def test_extension_filtering():
+    """filter_extensions restreint les types de fichiers acceptés."""
+    from alambic_workers.tasks.start_ingestion import _extension_allowed
+
+    class _Cfg:
+        def __init__(self, filt):
+            self.general = {"filter_extensions": filt}
+
+    # Pas de restriction → tout autorisé.
+    assert _extension_allowed(_Cfg(""), "doc.pdf") is True
+    assert _extension_allowed(_Cfg(""), "video.mp4") is True
+
+    # Restriction → filtre.
+    c = _Cfg("pdf, jpg, png")
+    assert _extension_allowed(c, "facture.pdf") is True
+    assert _extension_allowed(c, "photo.JPG") is True  # insensible à la casse
+    assert _extension_allowed(c, "video.mp4") is False
+
+    # Tolère points et point-virgule.
+    c2 = _Cfg(".pdf;.docx")
+    assert _extension_allowed(c2, "rapport.docx") is True
+    assert _extension_allowed(c2, "image.gif") is False

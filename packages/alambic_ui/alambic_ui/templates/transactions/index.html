@@ -47,6 +47,73 @@
   .act-btn:hover { background:var(--slate-100); }
   .act-retry { color:var(--warning-600); }
   .act-delete { color:#c0392b; }
+  .th-sort a { color:inherit; text-decoration:none; cursor:pointer; display:inline-flex; align-items:center; gap:3px; }
+  .th-sort a:hover { color:var(--navy); }
+  .th-active a { color:var(--navy); font-weight:700; }
+  .sort-ind { font-size:9px; }
+  .col-check { width:32px; text-align:center; }
+  .bulk-bar { display:flex; align-items:center; gap:12px; padding:8px 0; min-height:34px; }
+  #bulk-count { font-size:13px; color:var(--slate-500); }
+  .btn-danger { background:var(--danger-600,#dc2626); color:#fff; border:none; }
+  .btn-danger:disabled { opacity:.4; cursor:not-allowed; }
+  .btn-sm { padding:5px 12px; font-size:13px; border-radius:6px; }
+  .pagination { display:flex; align-items:center; gap:12px; justify-content:center; padding:14px 0; }
+  .page-num { font-size:13px; color:var(--slate-500); }
+  .btn-light { background:var(--slate-50); color:var(--slate-600); border:1px solid var(--slate-200); text-decoration:none; }
+  .btn-light.disabled { opacity:.4; pointer-events:none; }
+  .val-summary { font-size:13px; }
+  .val-pending { color:var(--warning-500,#f59e0b); margin-left:3px; }
+  .doc-validate-btn { border:none; background:var(--teal,#0FB3A6); color:#fff; cursor:pointer;
+    font-size:12px; padding:3px 10px; border-radius:6px; }
+  .val-modal { position:fixed; inset:0; background:rgba(14,33,64,.55); z-index:1000;
+    display:flex; align-items:center; justify-content:center; }
+  .val-modal-box { background:#fff; border-radius:10px; width:98vw; height:96vh;
+    display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .val-modal-head { display:flex; align-items:center; justify-content:space-between;
+    padding:12px 18px; border-bottom:1px solid var(--slate-100); font-weight:600; color:var(--navy); }
+  .val-close { border:none; background:none; font-size:18px; cursor:pointer; color:var(--slate-400); }
+  .val-modal-body { flex:1; display:flex; min-height:0; }
+  .val-sidebar { width:230px; flex-shrink:0; border-right:1px solid var(--slate-100);
+    display:flex; flex-direction:column; background:#fff; }
+  .val-sidebar-head { padding:10px 14px; font-size:12px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.03em; color:var(--slate-400); border-bottom:1px solid var(--slate-100); }
+  .val-doc-list { list-style:none; margin:0; padding:0; overflow-y:auto; flex:1; }
+  .val-doc-item { padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--slate-50);
+    display:flex; align-items:center; gap:8px; font-size:13px; }
+  .val-doc-item:hover { background:var(--slate-50); }
+  .val-doc-item.active { background:var(--teal-50,#e6faf8); border-left:3px solid var(--teal,#0FB3A6); }
+  .val-doc-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .val-doc-dot.pending { background:var(--warning-500,#f59e0b); }
+  .val-doc-dot.validated { background:var(--success-500,#22c55e); }
+  .val-doc-dot.error { background:var(--danger-500,#ef4444); }
+  .val-doc-dot.other { background:var(--slate-300,#cbd5e1); }
+  .val-doc-meta { min-width:0; }
+  .val-doc-type { font-weight:500; color:var(--navy); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .val-doc-id { font-size:11px; color:var(--slate-400); font-family:monospace; }
+  .val-viewer { flex:1.4; display:flex; flex-direction:column; background:var(--slate-50); min-width:0; }
+  .val-pdf-toolbar { display:flex; align-items:center; gap:12px; justify-content:center;
+    padding:8px; border-bottom:1px solid var(--slate-100); }
+  .val-pdf-toolbar button { border:1px solid var(--slate-200); background:#fff; cursor:pointer;
+    width:30px; height:30px; border-radius:6px; font-size:16px; }
+  .val-pdf-canvas-wrap { flex:1; overflow:auto; display:flex; justify-content:center;
+    align-items:flex-start; padding:14px; background:var(--slate-100); }
+  #val-pdf-canvas { height:auto; box-shadow:0 2px 12px rgba(0,0,0,.15); background:#fff; }
+  .val-toolbar-sep { width:1px; height:18px; background:var(--slate-200); margin:0 4px; }
+  #val-pdf-zoom { font-size:12px; color:var(--slate-500); min-width:48px; text-align:center; }
+  .val-fields { flex:1; display:flex; flex-direction:column; padding:16px; overflow-y:auto; }
+  .val-doctype { font-size:13px; color:var(--slate-500); margin-bottom:12px; }
+  .val-field { margin-bottom:12px; }
+  .val-field label { display:block; font-size:12px; color:var(--slate-500); margin-bottom:4px; }
+  .val-field input { width:100%; padding:7px 10px; border:1px solid var(--slate-200);
+    border-radius:6px; font-size:14px; }
+  .val-field.low-score input { border-color:var(--warning-500,#f59e0b); background:#fffbeb; }
+  .val-field .val-score { font-size:11px; color:var(--slate-400); margin-left:6px; }
+  .val-modal-actions { display:flex; gap:10px; margin-top:12px; padding-top:12px;
+    border-top:1px solid var(--slate-100); }
+  .btn-primary { background:var(--teal,#0FB3A6); color:#fff; border:none; }
+  .val-msg { margin-top:10px; font-size:13px; }
+  .val-msg.ok { color:var(--success-600,#16a34a); }
+  .val-msg.err { color:var(--danger-600,#dc2626); }
 </style>
 {% endblock %}
 
@@ -90,26 +157,90 @@
 {% endif %}
 
 {% if transactions %}
+{% macro sort_th(label, key) %}
+  {% set is_active = (sort_by == key) %}
+  {% set next_order = "asc" if (is_active and order == "desc") else ("desc" if is_active else "desc") %}
+  <th class="th-sort{{ ' th-active' if is_active }}">
+    <a href="{{ url_for('transactions.index', sort_by=key, order=next_order, page=page) }}">
+      {{ label }}<span class="sort-ind">{{ "▲" if (is_active and order == "asc") else ("▼" if is_active else "") }}</span>
+    </a>
+  </th>
+{% endmacro %}
+
+<form method="POST" action="{{ url_for('transactions.delete_bulk') }}" id="bulk-form"
+      onsubmit="return confirm('Supprimer définitivement les transactions sélectionnées et leurs fichiers ?');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="bulk-bar" id="bulk-bar">
+    <span id="bulk-count">0 sélectionnée(s)</span>
+    <button type="submit" class="btn btn-danger btn-sm" id="bulk-delete-btn" disabled>Supprimer la sélection</button>
+  </div>
+</form>
+
 <table class="tx-table">
   <thead>
     <tr>
-      <th></th><th>ID</th><th>Date</th><th>Compte</th><th>Config</th>
-      <th>État</th><th>Process</th><th>Documents</th><th>Coût</th><th>Actions</th>
+      <th class="col-check"><input type="checkbox" id="check-all" title="Tout sélectionner"></th>
+      <th></th>
+      <th>ID</th>
+      {{ sort_th("Date", "creation_date") }}
+      {{ sort_th("Compte", "account_id") }}
+      {{ sort_th("Config", "config__id") }}
+      {{ sort_th("État", "status") }}
+      {{ sort_th("Process", "process") }}
+      <th>Validation</th>
+      <th>Complétude</th>
+      <th>Documents</th>
+      <th>Coût</th>
+      <th>Actions</th>
     </tr>
   </thead>
   <tbody>
     {% for tx in transactions %}
-    <tr class="tx-row" data-tx="{{ tx.id }}" onclick="toggleDocs('{{ tx.id }}')">
-      <td><span class="tx-caret">▶</span></td>
-      <td class="mono">{{ tx.id }}</td>
-      <td>{{ tx.created_at.strftime("%d/%m/%Y %H:%M") if tx.created_at else "—" }}</td>
-      <td>{{ tx.account }}</td>
-      <td>{{ tx.config }}</td>
-      <td><span class="st st-{{ tx.status|lower }}" data-st-for="{{ tx.id }}">{{ tx.status }}</span></td>
-      <td>{{ tx.process or "—" }}</td>
-      <td class="mono" data-docs-for="{{ tx.id }}">{{ tx.nb_docs }}</td>
-      <td class="mono">{{ "%.3f €"|format(tx.cost) if tx.cost is not none else "—" }}</td>
+    <tr class="tx-row" data-tx="{{ tx.id }}">
+      <td class="col-check" onclick="event.stopPropagation()">
+        <input type="checkbox" name="transaction_ids" value="{{ tx.id }}" class="row-check" form="bulk-form">
+      </td>
+      <td onclick="toggleDocs('{{ tx.id }}')"><span class="tx-caret">▶</span></td>
+      <td class="mono" onclick="toggleDocs('{{ tx.id }}')">{{ tx.id }}</td>
+      <td onclick="toggleDocs('{{ tx.id }}')">{{ tx.created_at.strftime("%d/%m/%Y %H:%M") if tx.created_at else "—" }}</td>
+      <td onclick="toggleDocs('{{ tx.id }}')">{{ tx.account }}</td>
+      <td onclick="toggleDocs('{{ tx.id }}')">{{ tx.config }}</td>
+      <td onclick="toggleDocs('{{ tx.id }}')"><span class="st st-{{ tx.status|lower }}" data-st-for="{{ tx.id }}">{{ tx.status }}</span></td>
+      <td onclick="toggleDocs('{{ tx.id }}')">{{ tx.process or "—" }}</td>
+      <td onclick="toggleDocs('{{ tx.id }}')">
+        {% if tx.validation and tx.validation.total %}
+          <span class="val-summary" title="{{ tx.validation.validated }} validé(s), {{ tx.validation.pending }} en attente, {{ tx.validation.error }} en erreur">
+            {{ tx.validation.validated }}/{{ tx.validation.total }}
+            {% if tx.validation.pending %}<span class="val-pending">●</span>{% endif %}
+          </span>
+        {% else %}—{% endif %}
+      </td>
+      <td onclick="toggleDocs('{{ tx.id }}')">
+        {% if tx.completeness %}
+          {% if tx.completeness.overridden %}
+            <span class="cpl cpl-override" title="Dossier débloqué manuellement (export autorisé malgré pièces manquantes)">Débloqué</span>
+          {% elif tx.completeness.complete %}
+            <span class="cpl cpl-ok" title="Toutes les pièces obligatoires sont présentes">
+              {{ tx.completeness.required_present }}/{{ tx.completeness.required_total }} ✓
+            </span>
+          {% else %}
+            <span class="cpl cpl-missing" title="Manque : {{ tx.completeness.missing_required|join(', ') }}">
+              {{ tx.completeness.required_present }}/{{ tx.completeness.required_total }}
+              <span class="cpl-detail">manque {{ tx.completeness.missing_required|join(', ') }}</span>
+            </span>
+          {% endif %}
+        {% else %}—{% endif %}
+      </td>
+      <td class="mono" data-docs-for="{{ tx.id }}" onclick="toggleDocs('{{ tx.id }}')">{{ tx.nb_docs }}</td>
+      <td class="mono" onclick="toggleDocs('{{ tx.id }}')">{{ "%.3f €"|format(tx.cost) if tx.cost is not none else "—" }}</td>
       <td class="tx-actions" onclick="event.stopPropagation()">
+        {% if tx.completeness and not tx.completeness.complete and not tx.completeness.overridden %}
+        <form method="POST" action="{{ url_for('transactions.unlock_completeness', tx_id=tx.id) }}" style="display:inline;"
+              onsubmit="return confirm('Débloquer ce dossier incomplet et autoriser son export malgré les pièces manquantes ?');">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="act-btn act-unlock" title="Débloquer le dossier incomplet (autoriser l'export)">🔓</button>
+        </form>
+        {% endif %}
         {% if tx.is_stuck %}
         <form method="POST" action="{{ url_for('transactions.retry', tx_id=tx.id) }}" style="display:inline;"
               onsubmit="return confirm('Relancer cette transaction bloquée ?');">
@@ -117,7 +248,7 @@
           <button type="submit" class="act-btn act-retry" title="Relancer (bloquée depuis >10 min)">↻</button>
         </form>
         {% endif %}
-        {% if not tx.is_working %}
+        {% if not tx.is_working or tx.is_stuck %}
         <form method="POST" action="{{ url_for('transactions.delete', tx_id=tx.id) }}" style="display:inline;"
               onsubmit="return confirm('Supprimer définitivement cette transaction et ses fichiers ?');">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -127,17 +258,69 @@
       </td>
     </tr>
     <tr class="tx-docs-row" id="docs-{{ tx.id }}" style="display:none;">
-      <td colspan="10"><div class="tx-docs-wrap" id="docs-wrap-{{ tx.id }}"></div></td>
+      <td colspan="13"><div class="tx-docs-wrap" id="docs-wrap-{{ tx.id }}"></div></td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+
+  <div class="pagination">
+    {% if page > 1 %}
+      <a class="btn btn-light btn-sm" href="{{ url_for('transactions.index', sort_by=sort_by, order=order, page=page-1) }}">← Précédent</a>
+    {% else %}
+      <span class="btn btn-light btn-sm disabled">← Précédent</span>
+    {% endif %}
+    <span class="page-num">Page {{ page }}</span>
+    {% if has_next %}
+      <a class="btn btn-light btn-sm" href="{{ url_for('transactions.index', sort_by=sort_by, order=order, page=page+1) }}">Suivant →</a>
+    {% else %}
+      <span class="btn btn-light btn-sm disabled">Suivant →</span>
+    {% endif %}
+  </div>
 {% else %}
 <div class="card"><div class="empty">
   <h3>Aucune transaction</h3>
   <p>Déclenchez un traitement en déposant des documents.</p>
 </div></div>
 {% endif %}
+
+<!-- ── Modale de validation : viewer PDF + champs éditables ─────────────────── -->
+<div id="val-modal" class="val-modal" style="display:none;">
+  <div class="val-modal-box">
+    <div class="val-modal-head">
+      <span id="val-modal-title">Validation du document</span>
+      <button type="button" class="val-close" onclick="closeValidation()" title="Fermer">✕</button>
+    </div>
+    <div class="val-modal-body">
+      <div class="val-sidebar">
+        <div class="val-sidebar-head">Documents</div>
+        <ul id="val-doc-list" class="val-doc-list"></ul>
+      </div>
+      <div class="val-viewer">
+        <div class="val-pdf-toolbar">
+          <button type="button" onclick="valPdfPage(-1)" title="Page précédente">‹</button>
+          <span id="val-pdf-pageinfo">—</span>
+          <button type="button" onclick="valPdfPage(1)" title="Page suivante">›</button>
+          <span class="val-toolbar-sep"></span>
+          <button type="button" onclick="valZoom(-0.2)" title="Dézoomer">−</button>
+          <span id="val-pdf-zoom">100 %</span>
+          <button type="button" onclick="valZoom(0.2)" title="Zoomer">+</button>
+          <button type="button" onclick="valZoomFit()" title="Ajuster à la largeur">⤢</button>
+        </div>
+        <div class="val-pdf-canvas-wrap"><canvas id="val-pdf-canvas"></canvas></div>
+      </div>
+      <div class="val-fields">
+        <div class="val-doctype" id="val-doctype">—</div>
+        <div id="val-fields-list"></div>
+        <div class="val-modal-actions">
+          <button type="button" class="btn btn-light btn-sm" onclick="saveValidation(false)">Enregistrer</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="saveValidation(true)">Valider</button>
+        </div>
+        <div class="val-msg" id="val-msg"></div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 const loadedDocs = new Set();
@@ -183,5 +366,231 @@ function refreshStatuses() {
     .catch(() => {});
 }
 setInterval(refreshStatuses, 5000);
+// ── Modale de validation : viewer PDF + champs ─────────────────────────────
+const PDFJS_SRC = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+let _valTxId = null;
+let _valDocId = null;
+let _valDocs = [];
+let _valPdf = null;
+let _valPage = 1;
+let _valZoom = 1.4; // 1.4 = niveau « 100 % » de référence
+
+function _loadPdfJs() {
+  return new Promise((resolve, reject) => {
+    if (window.pdfjsLib) return resolve(window.pdfjsLib);
+    const s = document.createElement("script");
+    s.src = PDFJS_SRC;
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+      resolve(window.pdfjsLib);
+    };
+    s.onerror = () => reject(new Error("pdf.js indisponible"));
+    document.head.appendChild(s);
+  });
+}
+
+async function openValidation(txId, docId) {
+  _valTxId = txId;
+  document.getElementById("val-modal").style.display = "flex";
+  await loadDocList();
+  // Document initial : celui cliqué, sinon le premier en attente.
+  const target = docId || (_valDocs.find((d) => d.state === "pending") || _valDocs[0] || {}).id;
+  if (target) await loadDocument(target);
+}
+
+async function loadDocList() {
+  try {
+    const res = await fetch(`/transactions/${_valTxId}/validation-list`);
+    const data = await res.json();
+    _valDocs = data.documents || [];
+  } catch (e) {
+    _valDocs = [];
+  }
+  renderDocList();
+}
+
+function renderDocList() {
+  const list = document.getElementById("val-doc-list");
+  list.innerHTML = "";
+  _valDocs.forEach((d) => {
+    const li = document.createElement("li");
+    li.className = "val-doc-item" + (d.id === _valDocId ? " active" : "");
+    li.onclick = () => loadDocument(d.id);
+    li.innerHTML =
+      `<span class="val-doc-dot ${d.state}"></span>` +
+      `<span class="val-doc-meta">` +
+      `<div class="val-doc-type">${d.doctype}</div>` +
+      `<div class="val-doc-id">${d.id}</div>` +
+      `</span>`;
+    list.appendChild(li);
+  });
+}
+
+async function loadDocument(docId) {
+  _valDocId = docId;
+  _valPage = 1;
+  renderDocList();
+  document.getElementById("val-msg").textContent = "";
+  document.getElementById("val-fields-list").innerHTML = "<p>Chargement…</p>";
+
+  // Champs extraits.
+  try {
+    const res = await fetch(`/transactions/documents/${docId}/indexes`);
+    const data = await res.json();
+    document.getElementById("val-doctype").textContent =
+      "Type : " + (data.doctype || "—") + (data.doctype_desc ? " — " + data.doctype_desc : "");
+    renderFields(data.indexes || []);
+  } catch (e) {
+    document.getElementById("val-fields-list").innerHTML = "<p>Erreur de chargement des champs.</p>";
+  }
+
+  // PDF.
+  document.getElementById("val-pdf-pageinfo").textContent = "…";
+  try {
+    const pdfjs = await _loadPdfJs();
+    const buf = await (await fetch(`/transactions/documents/${docId}/pdf`)).arrayBuffer();
+    _valPdf = await pdfjs.getDocument({ data: buf }).promise;
+    renderPdfPage();
+  } catch (e) {
+    _valPdf = null;
+    document.getElementById("val-pdf-pageinfo").textContent = "PDF indisponible";
+  }
+}
+
+function renderFields(indexes) {
+  const list = document.getElementById("val-fields-list");
+  if (!indexes.length) {
+    list.innerHTML = "<p>Aucun champ extrait.</p>";
+    return;
+  }
+  list.innerHTML = "";
+  indexes.forEach((idx, i) => {
+    const score = parseFloat(idx.index_score || "0");
+    const low = score > 0 && score < 0.9;
+    const wrap = document.createElement("div");
+    wrap.className = "val-field" + (low ? " low-score" : "");
+    wrap.innerHTML =
+      `<label>${idx.index_name}` +
+      (idx.index_score ? `<span class="val-score">score ${score.toFixed(2)}</span>` : "") +
+      `</label><input type="text" data-name="${idx.index_name}" value="${(idx.index_value || "").replace(/"/g, "&quot;")}">`;
+    list.appendChild(wrap);
+  });
+}
+
+function collectFields() {
+  return Array.from(document.querySelectorAll("#val-fields-list input")).map((inp) => ({
+    index_name: inp.dataset.name,
+    index_value: inp.value,
+  }));
+}
+
+async function saveValidation(validate) {
+  const url = `/transactions/documents/${_valDocId}/${validate ? "validate" : "save"}`;
+  const msg = document.getElementById("val-msg");
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token() }}" },
+      body: JSON.stringify({ indexes: collectFields() }),
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    msg.className = "val-msg ok";
+    msg.textContent = validate ? "Document validé." : "Modifications enregistrées.";
+
+    if (validate) {
+      // Met à jour l'état dans le volet, puis avance au suivant en attente.
+      const cur = _valDocs.find((d) => d.id === _valDocId);
+      if (cur) cur.state = "validated";
+      renderDocList();
+      const next = _valDocs.find((d) => d.state === "pending");
+      if (next) {
+        setTimeout(() => loadDocument(next.id), 500);
+      } else {
+        // Plus rien à valider : on ferme et on rafraîchit le tableau.
+        msg.textContent = "Tous les documents sont validés.";
+        setTimeout(() => { closeValidation(); location.reload(); }, 800);
+      }
+    }
+  } catch (e) {
+    msg.className = "val-msg err";
+    msg.textContent = "Échec : " + e.message;
+  }
+}
+
+function renderPdfPage() {
+  if (!_valPdf) return;
+  _valPdf.getPage(_valPage).then((page) => {
+    const canvas = document.getElementById("val-pdf-canvas");
+    const viewport = page.getViewport({ scale: _valZoom });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    page.render({ canvasContext: canvas.getContext("2d"), viewport });
+    document.getElementById("val-pdf-pageinfo").textContent = `${_valPage} / ${_valPdf.numPages}`;
+    document.getElementById("val-pdf-zoom").textContent = Math.round(_valZoom / 1.4 * 100) + " %";
+  });
+}
+
+function valZoom(delta) {
+  _valZoom = Math.min(5.6, Math.max(0.42, _valZoom + delta * 1.4));
+  renderPdfPage();
+}
+
+function valZoomFit() {
+  if (!_valPdf) return;
+  _valPdf.getPage(_valPage).then((page) => {
+    const wrap = document.querySelector(".val-pdf-canvas-wrap");
+    const base = page.getViewport({ scale: 1 });
+    const avail = wrap.clientWidth - 36; // padding
+    _valZoom = Math.max(0.42, avail / base.width);
+    renderPdfPage();
+  });
+}
+
+function valPdfPage(delta) {
+  if (!_valPdf) return;
+  const next = _valPage + delta;
+  if (next >= 1 && next <= _valPdf.numPages) {
+    _valPage = next;
+    renderPdfPage();
+  }
+}
+
+function closeValidation() {
+  document.getElementById("val-modal").style.display = "none";
+  _valPdf = null;
+  _valDocId = null;
+  _valTxId = null;
+  _valDocs = [];
+}
+
+// ── Sélection groupée (cases à cocher) ─────────────────────────────────────
+(function () {
+  const checkAll = document.getElementById("check-all");
+  const countEl = document.getElementById("bulk-count");
+  const deleteBtn = document.getElementById("bulk-delete-btn");
+
+  function rowChecks() {
+    return Array.from(document.querySelectorAll(".row-check"));
+  }
+  function refresh() {
+    const checked = rowChecks().filter((c) => c.checked);
+    if (countEl) countEl.textContent = checked.length + " sélectionnée(s)";
+    if (deleteBtn) deleteBtn.disabled = checked.length === 0;
+    if (checkAll) {
+      const all = rowChecks();
+      checkAll.checked = all.length > 0 && checked.length === all.length;
+      checkAll.indeterminate = checked.length > 0 && checked.length < all.length;
+    }
+  }
+  if (checkAll) {
+    checkAll.addEventListener("change", () => {
+      rowChecks().forEach((c) => (c.checked = checkAll.checked));
+      refresh();
+    });
+  }
+  rowChecks().forEach((c) => c.addEventListener("change", refresh));
+  refresh();
+})();
 </script>
 {% endblock %}

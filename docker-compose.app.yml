@@ -112,7 +112,10 @@ services:
     deploy:
       replicas: 1
 
-  # ── Beat : planificateur (purge de rétention quotidienne) ──────────────────
+  # ── Beat : planificateur des tâches de fond ────────────────────────────────
+  # - rétention quotidienne (purge des transactions exportées, 3h)
+  # - balayage des exports en attente (rattrapage, toutes les 15 min)
+  # - voiture-balai Garage (dossiers orphelins, dimanche 4h)
   beat:
     <<: [*app-image, *app-common]
     command: celery -A alambic_workers.celery_app:app beat --loglevel=INFO
