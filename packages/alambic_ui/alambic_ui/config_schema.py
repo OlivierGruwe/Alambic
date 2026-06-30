@@ -2,7 +2,7 @@
 alambic_ui.config_schema — cartographie des configurations.
 
 Une Config a une structure mixte dans alambic_core :
-  - champs simples (config_name, account_id, doctype_id, need_validation,
+  - champs simples (config_name, account_id, need_validation,
     multi_doc_detect) ;
   - 3 blocs JSONB : general, edenai_settings, ws ;
   - 6 secrets chiffrés : ftp_in_enc, ftp_out_enc, aws_in_enc, aws_out_enc,
@@ -59,9 +59,8 @@ EDENAI_KEYS = [
     "extract_model",
     "fallback_extract_provider",
     "fallback_extract_model",
-    # Reconnaissance (vision / object detection)
-    "object_detection_provider",
-    "fallback_object_detection_provider",
+    # Reconnaissance (vision LLM — détection multi-document)
+    "vision_end_point",
     "vision_llm_provider",
     "vision_llm_model",
     "fallback_vision_llm_provider",
@@ -123,8 +122,6 @@ LLM_MODELS = [
 ]
 EMBEDDING_PROVIDERS: list[str] = []  # embedding local (TEI), plus de provider tiers
 EMBEDDING_MODELS: list[str] = []
-OBJECT_DETECTION_PROVIDERS = ["amazon", "api4ai"]
-
 # Langues OCR proposées (code, libellé).
 OCR_LANGUAGES = [
     ("", "— Auto —"),
@@ -199,13 +196,18 @@ def parse_config(config) -> dict:
     # Champs simples
     data["config_name"] = config.config_name or ""
     data["account_id"] = config.account_id or ""
-    data["doctype_id"] = config.doctype_id or ""
     for k in SIMPLE_BOOL:
         data[k] = bool(getattr(config, k, False))
 
     # Doctypes attendus (complétude) : sérialisés en JSON pour le JS du formulaire.
     data["expected_doctypes"] = json.dumps(
         getattr(config, "expected_doctypes", None) or [], ensure_ascii=False
+    )
+    data["config_fields"] = json.dumps(
+        getattr(config, "config_fields", None) or [], ensure_ascii=False
+    )
+    data["consolidation_ws"] = json.dumps(
+        getattr(config, "consolidation_ws", None) or [], ensure_ascii=False
     )
 
     # Blocs JSONB
@@ -237,22 +239,27 @@ def apply_form_to_config(config, form_data) -> None:
     Reconstruit les blocs JSONB et, pour les secrets, ne remplace que ceux qui
     ont été saisis (vide = inchangé).
     """
-    # Champs simples
-    config.config_name = (form_data.get("config_name") or "").strip()
-    # doctype_id n'est plus dans le formulaire (remplacé par expected_doctypes).
-    # On ne l'écrase plus : la valeur existante est conservée comme repli de
-    # compatibilité côté backend (split/barcode/extraction).
+    # Champs simples — le nom est normalisé en snake_case (sans accent/espaces).
+    from alambic_core.domain.naming import to_snake_case
+
+    config.config_name = to_snake_case(form_data.get("config_name") or "")
     for k in SIMPLE_BOOL:
         setattr(config, k, _checkbox(form_data, k))
 
     # Doctypes attendus (complétude) : JSON [{doctype_id, required}] depuis le
     # champ caché alimenté par le JS. Tolère vide/malformé → liste vide.
     config.expected_doctypes = _parse_expected_doctypes(form_data.get("expected_doctypes"))
+    config.config_fields = _parse_config_fields(form_data.get("config_fields"))
+    config.consolidation_ws = _parse_consolidation_ws(form_data.get("consolidation_ws"))
 
-    # Blocs JSONB
-    config.general = {k: _from_form(k, form_data.get(k)) for k in GENERAL_KEYS}
-    config.edenai_settings = {k: _from_form(k, form_data.get(k)) for k in EDENAI_KEYS}
-    config.ws = {k: _from_form(k, form_data.get(k)) for k in IN_KEYS + OUT_KEYS + EXPORT_KEYS}
+    # Blocs JSONB : on ne réécrit QUE les champs réellement présents dans le
+    # formulaire soumis. Un champ absent de form_data (select désactivé, options
+    # injectées en JS non encore chargées, onglet non rendu…) conserve sa valeur
+    # existante — sinon une simple sauvegarde effacerait la config EdenAI (région,
+    # providers, modèles, endpoints) alors que l'utilisateur n'y a pas touché.
+    config.general = _merge_block(config.general, form_data, GENERAL_KEYS)
+    config.edenai_settings = _merge_block(config.edenai_settings, form_data, EDENAI_KEYS)
+    config.ws = _merge_block(config.ws, form_data, IN_KEYS + OUT_KEYS + EXPORT_KEYS)
 
     # Secrets : un dict chiffré par colonne ; vide saisi = inchangé.
     for col, mapping in SECRET_BLOCKS.items():
@@ -260,7 +267,10 @@ def apply_form_to_config(config, form_data) -> None:
         changed = False
         for form_key, secret_key in mapping.items():
             val = form_data.get(form_key)
-            if val:  # saisi → on remplace
+            # Filet de sécurité : un navigateur peut soumettre la valeur de
+            # remplacement « •••• » (placeholder autofill). Ne JAMAIS l'enregistrer
+            # comme clé — sinon on écrase le vrai secret par des puces.
+            if val and not _is_placeholder_secret(val):
                 existing[secret_key] = val
                 changed = True
         if changed:
@@ -293,6 +303,90 @@ def _parse_expected_doctypes(raw) -> list:
     return result
 
 
+def _parse_config_fields(raw) -> list:
+    """Parse le champ config_fields du formulaire (JSON) en liste normalisée.
+
+    Format : [{"field_name", "field_label", "source_type", "source_key",
+    "default_value"}]. Les champs sans field_name sont ignorés. source_type est
+    contraint à 'context' ou 'computed'.
+    """
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    result = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("field_name") or "").strip()
+        if not name:
+            continue
+        source_type = str(item.get("source_type") or "").strip().lower()
+        if source_type not in ("context", "computed"):
+            source_type = "context"
+        result.append(
+            {
+                "field_name": name,
+                "field_label": str(item.get("field_label") or "").strip(),
+                "source_type": source_type,
+                "source_key": str(item.get("source_key") or "").strip(),
+                "default_value": str(item.get("default_value") or ""),
+            }
+        )
+    return result
+
+
+def _parse_consolidation_ws(raw) -> list:
+    """Parse le champ consolidation_ws du formulaire (JSON) en liste normalisée.
+
+    Format : [{"name", "url", "method", "response_status_path",
+    "response_mapping", "on_failure"}]. Les définitions sans name sont ignorées.
+    method ∈ {GET, POST}, on_failure ∈ {skip, error}, response_mapping en dict.
+    """
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(data, list):
+        return []
+    result = []
+    seen = set()
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        method = str(item.get("method") or "GET").strip().upper()
+        if method not in ("GET", "POST"):
+            method = "GET"
+        on_failure = str(item.get("on_failure") or "skip").strip().lower()
+        if on_failure not in ("skip", "error"):
+            on_failure = "skip"
+        mapping = item.get("response_mapping")
+        if not isinstance(mapping, dict):
+            mapping = {}
+        result.append(
+            {
+                "name": name,
+                "target_field": str(item.get("target_field") or "").strip(),
+                "url": str(item.get("url") or "").strip(),
+                "method": method,
+                "response_status_path": str(item.get("response_status_path") or "").strip(),
+                "response_mapping": {str(k): str(v) for k, v in mapping.items()},
+                "on_failure": on_failure,
+            }
+        )
+    return result
+
+
 def _load_secret(raw: str) -> dict:
     if not raw or not raw.strip():
         return {}
@@ -301,6 +395,18 @@ def _load_secret(raw: str) -> dict:
         return d if isinstance(d, dict) else {}
     except (ValueError, TypeError):
         return {}
+
+
+# Caractères de puce/masquage qu'un navigateur peut soumettre à la place d'un
+# secret (placeholder autofill). Une valeur composée UNIQUEMENT de ces caractères
+# n'est jamais un vrai secret et ne doit pas écraser celui en base.
+_SECRET_PLACEHOLDER_CHARS = set("•·*●∙*◦⦿\u2022\u00b7\u25cf\u2219")
+
+
+def _is_placeholder_secret(val: str) -> bool:
+    """True si la valeur n'est qu'une suite de puces/masques (autofill placeholder)."""
+    s = (val or "").strip()
+    return bool(s) and all(c in _SECRET_PLACEHOLDER_CHARS for c in s)
 
 
 def _checkbox(form_data, key) -> bool:
@@ -323,3 +429,28 @@ def _from_form(key, value):
     if key in BOOL_KEYS:
         return bool(value) if isinstance(value, bool) else (value is not None and value != "")
     return (value or "").strip()
+
+
+def _merge_block(existing: dict | None, form_data, keys) -> dict:
+    """Fusionne un bloc JSONB avec le formulaire, en préservant l'existant.
+
+    Règle, par clé :
+      - booléen (BOOL_KEYS) : lu comme une case à cocher (absent = décoché). Une
+        case décochée n'apparaît pas dans form_data, donc l'absence signifie False
+        — c'est voulu pour les booléens.
+      - autre : si la clé est PRÉSENTE dans form_data, on prend la valeur soumise
+        (même vide = effacement volontaire). Si la clé est ABSENTE, on CONSERVE la
+        valeur existante.
+
+    Évite qu'une sauvegarde efface des réglages (région, providers, modèles,
+    endpoints EdenAI) que le formulaire n'a pas renvoyés — par ex. un select dont
+    les options sont injectées en JS, ou un champ désactivé non soumis.
+    """
+    out = dict(existing or {})
+    for k in keys:
+        if k in BOOL_KEYS:
+            out[k] = _from_form(k, _checkbox(form_data, k))
+        elif k in form_data:
+            out[k] = _from_form(k, form_data.get(k))
+        # sinon : clé absente du formulaire → on garde la valeur existante.
+    return out

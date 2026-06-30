@@ -43,7 +43,7 @@
       <div class="tab-panel" data-panel="ia">
         <div class="form-group">
           {{ form.edenai_secret_key.label }}
-          {{ form.edenai_secret_key(class="form-control", placeholder="••••••••" if has_secret else "") }}
+          {{ form.edenai_secret_key(class="form-control", autocomplete="new-password", placeholder="••••••••" if has_secret else "") }}
           <div class="form-hint">
             {% if has_secret %}
               Une clé est actuellement définie. {{ form.edenai_secret_key.description }}

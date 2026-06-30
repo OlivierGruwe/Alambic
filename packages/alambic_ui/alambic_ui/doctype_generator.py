@@ -65,16 +65,39 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
 def build_prompt(document_text: str) -> list[dict]:
     """Construit les messages LLM pour générer les champs d'un doctype.
 
-    Demande au modèle de proposer une liste de champs à extraire, au format JSON
-    aligné sur notre structure (field_name, field_type, field_description...).
+    Demande au modèle de proposer une liste de champs à extraire avec leur
+    stratégie d'extraction (ancres, direction, regexp) et de basculer sur l'IA
+    (use_ia) quand le champ est trop complexe pour des règles déterministes.
     """
     system = (
         "Tu es un assistant qui analyse des documents administratifs et propose "
-        "les champs structurés à en extraire. Réponds UNIQUEMENT en JSON valide, "
-        "sans texte autour. Format attendu : "
+        "les champs structurés à en extraire, AVEC leur stratégie d'extraction. "
+        "Réponds UNIQUEMENT en JSON valide, sans texte autour.\n\n"
+        "Pour CHAQUE champ, fournis :\n"
+        "- field_name : nom court en snake_case (ex. numero_facture).\n"
+        "- field_type : string | number | date | float.\n"
+        "- field_description : description courte et claire.\n"
+        "- anchors : mot(s)-clé(s) imprimé(s) JUSTE à côté de la valeur dans le "
+        "document, qui servent de point de repère (ex. pour un total tu mettrais "
+        '"Total TTC"). Plusieurs ancres séparées par des virgules. Vide si aucune '
+        "étiquette fixe n'existe.\n"
+        "- direction : où se trouve la valeur PAR RAPPORT à l'ancre. Une valeur "
+        "parmi right (à droite), left (à gauche), below (en dessous), above "
+        "(au-dessus), block (dans le même bloc), any (peu importe).\n"
+        "- regexp : expression régulière qui valide le FORMAT de la valeur quand "
+        "il est régulier (ex. \\d{14} pour un SIRET, \\d{2}/\\d{2}/\\d{4} pour une "
+        "date). Vide si le format est libre.\n"
+        "- use_ia : true SI le champ est trop complexe ou trop variable pour une "
+        "extraction par ancre/regexp (valeur en texte libre, position changeante, "
+        "sémantique nécessaire) ; dans ce cas laisse anchors/direction/regexp "
+        "vides. false si une règle déterministe suffit.\n\n"
+        "Règle : privilégie une extraction par ancre+direction (+regexp) quand le "
+        "document a une mise en page régulière ; n'active use_ia que lorsque c'est "
+        "réellement nécessaire (c'est plus coûteux).\n\n"
+        "Format EXACT attendu : "
         '{"document_type": "<nom_court_snake_case>", "fields": '
-        '[{"field_name": "<snake_case>", "field_type": '
-        '"string|number|date|float", "field_description": "<description courte>"}]}. '
+        '[{"field_name": "...", "field_type": "string", "field_description": "...", '
+        '"anchors": "...", "direction": "right", "regexp": "...", "use_ia": false}]}. '
         "Propose 5 à 15 champs pertinents."
     )
     user = f"Voici le texte d'un document. Propose les champs à extraire.\n\n{document_text[:6000]}"
@@ -141,15 +164,38 @@ def _parse_llm_response(resp_body: dict) -> list[dict]:
         raise GenerationError("Le modèle n'a pas renvoyé de JSON valide.") from exc
 
     raw_fields = data.get("fields", [])
+    valid_directions = {"right", "left", "below", "above", "block", "any"}
+    from alambic_core.domain.naming import to_snake_case
+
     fields = []
     for rf in raw_fields:
         f = empty_field()
-        f["field_name"] = str(rf.get("field_name", "")).strip()
+        f["field_name"] = to_snake_case(rf.get("field_name", ""))
         ftype = str(rf.get("field_type", "string")).strip()
         f["field_type"] = (
             ftype if ftype in ("string", "number", "date", "float", "object", "array") else "string"
         )
         f["field_description"] = str(rf.get("field_description", "")).strip()
+
+        # Stratégie d'extraction proposée par le LLM.
+        use_ia = bool(rf.get("use_ia", False))
+        f["use_ia"] = use_ia
+
+        if use_ia:
+            # Champ délégué à l'IA : on ignore les règles déterministes même si le
+            # modèle en a proposé (cohérence : use_ia + ancre/regexp se contredisent).
+            f["anchors"] = ""
+            f["direction"] = ""
+            f["regexp"] = ""
+        else:
+            f["anchors"] = str(rf.get("anchors", "")).strip()
+            direction = str(rf.get("direction", "")).strip().lower()
+            f["direction"] = direction if direction in valid_directions else ""
+            f["regexp"] = str(rf.get("regexp", "")).strip()
+            # Garde-fou : une direction n'a de sens qu'avec une ancre.
+            if f["direction"] and not f["anchors"]:
+                f["direction"] = ""
+
         if f["field_name"]:
             fields.append(f)
     return fields

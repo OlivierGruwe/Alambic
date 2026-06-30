@@ -47,7 +47,7 @@ def test_create_account(app_ctx):
     with Sess() as s:
         accs = s.query(Account).all()
         assert len(accs) == 1
-        assert accs[0].account_name == "ACME"
+        assert accs[0].account_name == "acme"
         assert accs[0].town == "Bordeaux"
 
 
@@ -74,7 +74,7 @@ def test_edit_account_keeps_active(app_ctx):
     )
     with Sess() as s:
         acc = s.get(Account, "a1")
-        assert acc.account_name == "New"
+        assert acc.account_name == "new"
         assert acc.active is True
 
 
@@ -129,7 +129,7 @@ def test_create_account_with_address_and_secret(app_ctx):
         follow_redirects=True,
     )
     with Sess() as s:
-        acc = s.query(Account).filter_by(account_name="ACME").first()
+        acc = s.query(Account).filter_by(account_name="acme").first()
         assert acc.address == {"line1": "10 rue de la Paix", "line3": "BP 42"}
         assert acc.enrich_allowed_domains == "api.partenaire.com, api.autre.fr"
         # Le secret est stocké (chiffré, mais lisible via le provider)
@@ -161,7 +161,7 @@ def test_edit_empty_secret_keeps_existing(app_ctx):
     )
     with Sess() as s:
         acc = s.get(Account, "a1")
-        assert acc.account_name == "X renamed"
+        assert acc.account_name == "x_renamed"
         assert acc.edenai_secret_key == "ORIGINAL-SECRET"  # conservé !
 
 

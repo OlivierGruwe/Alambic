@@ -17,7 +17,6 @@ from ..config_schema import (
     EXPORT_AUTH_TYPES,
     LLM_MODELS,
     LLM_PROVIDERS,
-    OBJECT_DETECTION_PROVIDERS,
     OCR_LANGUAGES,
     OCR_PROVIDERS,
     WAY_IN_CHOICES,
@@ -79,13 +78,36 @@ _REF_LISTS = {
     "llm_providers": LLM_PROVIDERS,
     "ocr_providers": OCR_PROVIDERS,
     "llm_models": LLM_MODELS,
-    "object_detection_providers": OBJECT_DETECTION_PROVIDERS,
     "ocr_languages": OCR_LANGUAGES,
 }
 
 
 def _session():
     return get_sessionmaker()()
+
+
+def _doctype_fields_map(session) -> dict:
+    """Mappe {doctype_name: [noms de champs]} pour les doctypes visibles.
+
+    Sert à peupler le select « champ cible » (@doctype:champ) des WS de
+    consolidation, côté config.
+    """
+    import json
+
+    out = {}
+    for d in _visible_doctypes(session):
+        try:
+            content = json.loads(d.json_content or "{}")
+        except (ValueError, TypeError):
+            content = {}
+        names = [
+            (f.get("field_name") or "").strip()
+            for f in content.get("fields", [])
+            if (f.get("field_name") or "").strip()
+        ]
+        if names:
+            out[d.doctype_name] = names
+    return out
 
 
 def _visible_doctypes(session):
@@ -98,11 +120,6 @@ def _visible_doctypes(session):
             or_(Doctype.is_public.is_(True), Doctype.account_id == current_user.account_id)
         )
     return q.all()
-
-
-def _populate_doctype_choices(form, session):
-    doctypes = _visible_doctypes(session)
-    form.doctype_id.choices = [("", "— Aucun —")] + [(d.id, d.doctype_name) for d in doctypes]
 
 
 def _visible_accounts(session):
@@ -135,7 +152,6 @@ def create_config():
     with _session() as s:
         form = ConfigForm()
         _populate_account_choices(form, s)
-        _populate_doctype_choices(form, s)
 
         if form.validate_on_submit():
             cfg = Config(
@@ -154,6 +170,7 @@ def create_config():
             mode="create",
             values=default_values(),
             has_secret={},
+            doctype_fields=_doctype_fields_map(s),
             auth_types=EXPORT_AUTH_TYPES,
             llm_catalog=_llm_catalog(),
             ai_catalog=_ai_catalog(),
@@ -172,7 +189,6 @@ def edit_config(config_id: str):
 
         form = ConfigForm(obj=cfg) if request.method == "GET" else ConfigForm()
         _populate_account_choices(form, s)
-        _populate_doctype_choices(form, s)
 
         if form.validate_on_submit():
             cfg.config_name = form.config_name.data
@@ -184,9 +200,9 @@ def edit_config(config_id: str):
 
         values = parse_config(cfg)
         has_secret = secret_presence(cfg)
+        doctype_fields = _doctype_fields_map(s)
         form.id.data = cfg.id
         form.account_id.data = cfg.account_id or ""
-        form.doctype_id.data = cfg.doctype_id or ""
         form.need_validation.data = cfg.need_validation
         form.multi_doc_detect.data = cfg.multi_doc_detect
         s.expunge_all()
@@ -197,6 +213,7 @@ def edit_config(config_id: str):
         config_id=config_id,
         values=values,
         has_secret=has_secret,
+        doctype_fields=doctype_fields,
         auth_types=EXPORT_AUTH_TYPES,
         llm_catalog=_llm_catalog(),
         ai_catalog=_ai_catalog(),

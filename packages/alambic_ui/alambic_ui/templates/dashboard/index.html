@@ -127,7 +127,49 @@
     color: var(--slate-400);
     line-height: 1.5;
   }
+  .period-switch { display: inline-flex; gap: 2px; background: var(--slate-100); border-radius: 8px; padding: 3px; }
+  .period-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--slate-500);
+    text-decoration: none;
+    transition: background .12s, color .12s;
+  }
+  .period-btn:hover { color: var(--navy); }
+  .period-active { background: #fff; color: var(--navy); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
   .empty-hint { padding: 24px 18px; color: var(--slate-400); font-size: 14px; text-align: center; }
+
+  /* Avertissement projection (estimation haute / bootstrap) */
+  .proj-warn {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    background: var(--amber-50, #fffbeb);
+    color: var(--amber-700, #b45309);
+    border: 1px solid var(--amber-200, #fde68a);
+  }
+  .proj-floor { color: var(--success-600, #16a34a); }
+
+  /* Répartition des 3 nœuds de classification */
+  .cls-lead { margin: 0 0 12px; font-size: 13.5px; color: var(--slate-600); }
+  .cls-free-pct { color: var(--success-600, #16a34a); }
+  .cls-bar {
+    display: flex; width: 100%; height: 18px;
+    border-radius: 9px; overflow: hidden;
+    background: var(--slate-100); margin-bottom: 14px;
+  }
+  .cls-seg { height: 100%; transition: width .3s; }
+  .cls-seg.cls-lexical, .cls-dot.cls-lexical { background: #14b8a6; }      /* teal — gratuit */
+  .cls-seg.cls-embedding, .cls-dot.cls-embedding { background: #22c55e; }  /* vert — gratuit */
+  .cls-seg.cls-llm, .cls-dot.cls-llm { background: #f59e0b; }              /* ambre — payant */
+  .cls-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 14px; }
+  .cls-legend li { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--slate-600); }
+  .cls-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .cls-val { color: var(--slate-400); font-size: 12px; }
 </style>
 {% endblock %}
 
@@ -137,6 +179,12 @@
     <h1>Tableau de bord</h1>
     <div class="subtitle">Vue d'ensemble de l'activité, des coûts et des performances du pipeline.</div>
   </div>
+  <div class="period-switch">
+    {% for key, label in periods %}
+    <a href="{{ url_for('dashboard.index', period=key) }}"
+       class="period-btn{{ ' period-active' if key == period }}">{{ label }}</a>
+    {% endfor %}
+  </div>
 </div>
 
 {# ─── Cartes de synthèse ─────────────────────────────────────────── #}
@@ -144,7 +192,7 @@
   <div class="stat-card">
     <div class="stat-label">Transactions</div>
     <div class="stat-value">{{ volumes.tx_total }}</div>
-    <div class="stat-sub">{{ volumes.tx_last_30d }} sur les 30 derniers jours</div>
+    <div class="stat-sub">{{ period_label|lower }}</div>
   </div>
   <div class="stat-card">
     <div class="stat-label">Documents</div>
@@ -213,16 +261,27 @@
           → <strong>{{ "%.5f"|format(projection.cost_per_doc) }} € / document</strong>
         </p>
         <table class="dash-table">
-          <thead><tr><th>Volume / mois</th><th>Coût estimé</th></tr></thead>
+          <thead><tr><th>Volume / mois</th><th>Coût estimé</th><th>À maturité*</th></tr></thead>
           <tbody>
             {% for row in projection.projection %}
             <tr>
               <td>{{ "{:,}".format(row.volume).replace(",", " ") }} docs</td>
               <td class="mono">{{ "%.2f"|format(row.monthly_cost) }} €</td>
+              <td class="mono proj-floor">{{ "%.2f"|format(row.monthly_cost_floor) }} €</td>
             </tr>
             {% endfor %}
           </tbody>
         </table>
+        {% if projection.llm_cost_share and projection.llm_cost_share >= 20 %}
+        <div class="proj-warn">
+          <strong>Estimation haute.</strong>
+          {{ "%.0f"|format(projection.llm_cost_share) }} % des coûts viennent encore
+          de classifications par le LLM (modèle vectoriel en apprentissage). Le coût
+          par document baissera à mesure que le vectoriel prend le relais : la colonne
+          <em>« à maturité »</em> indique le plancher si la classification devenait
+          entièrement vectorielle ({{ "%.5f"|format(projection.cost_per_doc_floor) }} € / doc).
+        </div>
+        {% endif %}
         {% if projection.per_process_avg %}
         <p class="proj-detail">Coût moyen par document et par étape :</p>
         <ul class="proj-list">
@@ -234,9 +293,55 @@
         <p class="proj-note">
           Estimation linéaire fondée sur les coûts réels déjà observés. Elle s'affine
           à mesure que le volume traité augmente.
+          <br>* « À maturité » : coût projeté si la classification était entièrement
+          assurée par le modèle vectoriel (gratuit), sans recours au LLM.
         </p>
       {% else %}
         <div class="empty-hint">Pas encore assez de données pour projeter. Traitez quelques documents.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ─── Répartition des classifications (3 nœuds de la cascade) ────── #}
+  <div class="panel">
+    <div class="panel-head">Répartition de la classification</div>
+    <div class="panel-body">
+      {% if classification.total %}
+        <p class="cls-lead">
+          Part <strong>gratuite</strong> (vectoriel + lexical, calcul local) :
+          <strong class="cls-free-pct">{{ "%.0f"|format(classification.free_pct) }} %</strong>
+          — {{ classification.free_count }} / {{ classification.total }} document(s).
+        </p>
+        <div class="cls-bar" role="img"
+             aria-label="Répartition : {{ "%.0f"|format(classification.nodes.lexical.pct) }} % lexical, {{ "%.0f"|format(classification.nodes.embedding.pct) }} % vectoriel, {{ "%.0f"|format(classification.nodes.llm.pct) }} % LLM">
+          {% if classification.nodes.lexical.pct %}
+          <span class="cls-seg cls-lexical" style="width:{{ classification.nodes.lexical.pct }}%"
+                title="Lexical : {{ classification.nodes.lexical.count }} doc(s)"></span>
+          {% endif %}
+          {% if classification.nodes.embedding.pct %}
+          <span class="cls-seg cls-embedding" style="width:{{ classification.nodes.embedding.pct }}%"
+                title="Vectoriel : {{ classification.nodes.embedding.count }} doc(s)"></span>
+          {% endif %}
+          {% if classification.nodes.llm.pct %}
+          <span class="cls-seg cls-llm" style="width:{{ classification.nodes.llm.pct }}%"
+                title="LLM : {{ classification.nodes.llm.count }} doc(s)"></span>
+          {% endif %}
+        </div>
+        <ul class="cls-legend">
+          <li><span class="cls-dot cls-lexical"></span> Lexical
+            <span class="cls-val">{{ "%.0f"|format(classification.nodes.lexical.pct) }} % · gratuit</span></li>
+          <li><span class="cls-dot cls-embedding"></span> Vectoriel
+            <span class="cls-val">{{ "%.0f"|format(classification.nodes.embedding.pct) }} % · gratuit</span></li>
+          <li><span class="cls-dot cls-llm"></span> LLM
+            <span class="cls-val">{{ "%.0f"|format(classification.nodes.llm.pct) }} % · {{ "%.4f"|format(classification.nodes.llm.cost) }} €</span></li>
+        </ul>
+        <p class="proj-note">
+          Le LLM (payant) n'est sollicité que lorsque le lexical et le vectoriel ne
+          tranchent pas. La part gratuite augmente à mesure que le modèle vectoriel
+          apprend de vos validations.
+        </p>
+      {% else %}
+        <div class="empty-hint">Aucune classification sur la période.</div>
       {% endif %}
     </div>
   </div>

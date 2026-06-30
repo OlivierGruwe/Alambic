@@ -14,6 +14,7 @@ Chaîne des étapes (queue entre parenthèses) :
         -> convert        (office si Office, sinon normal)
         -> read_cab       (cab)
         -> read_ocr       (ocr)
+        -> multi_doc      (normal)   [détection multi-document : vision Pixtral]
         -> detect_split   (normal)   [decoupage : brique F]
         -> classify       (classif)
         -> extract_fields (extract)
@@ -113,6 +114,46 @@ def read_ocr(self, payload: dict) -> dict:
     if not _document_active(payload):
         return payload
     payload = read_ocr_document(payload)
+    multi_doc.apply_async(args=[payload], queue="multidoc")
+    return payload
+
+
+# -- Etape : DETECTION MULTI-DOCUMENT (vision Pixtral) -----------------------
+
+
+@app.task(name="alambic_workers.processing.multi_doc", bind=True, acks_late=True)
+def multi_doc(self, payload: dict) -> dict:
+    """Détecte plusieurs documents physiques sur une page (vision Mistral/Pixtral).
+
+    Si la page contient N>1 documents distincts : crée N sous-documents croppés,
+    chacun repart à l'OCR (image neuve à lire) puis suit le pipeline normal.
+    Sinon le document continue vers le découpage par séparateur.
+    """
+    from alambic_workers.tasks.multi_doc import detect_multi_doc
+
+    if not _document_active(payload):
+        return payload
+    payload = detect_multi_doc(payload)
+
+    children = payload.get("children") or []
+    if children:
+        # Page multi-document : chaque sous-doc croppé repart à l'OCR (le crop est
+        # une image neuve, sans texte hérité), puis poursuit la chaîne.
+        for child in children:
+            child_payload = dict(payload)
+            child_payload["document"] = {
+                "documentId": child["documentId"],
+                "file": child["file"],
+                # Marque anti-boucle : ne pas re-détecter un sous-doc.
+                "source": "multi_doc_split",
+            }
+            child_payload.pop("children", None)
+            child_payload.pop("multi_doc", None)
+            child_payload.pop("barcodes", None)
+            read_ocr.apply_async(args=[child_payload], queue="ocr")
+        return payload
+
+    # Pas de multi-document : le document continue vers le découpage.
     detect_split.apply_async(args=[payload], queue="normal")
     return payload
 

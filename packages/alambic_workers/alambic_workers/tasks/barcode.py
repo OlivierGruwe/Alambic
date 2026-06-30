@@ -38,10 +38,8 @@ def _config_doctype_json(config_id: str | None) -> str | None:
         if config is None:
             return None
         # Avant classification : on concatène le json_content de tous les doctypes
-        # attendus (repli doctype_id) pour détecter une stratégie code-barres.
-        doctype_ids = doctype_ids_from_expected(config) or (
-            [config.doctype_id] if config.doctype_id else []
-        )
+        # attendus pour détecter une stratégie code-barres.
+        doctype_ids = doctype_ids_from_expected(config)
         contents = []
         for did in doctype_ids:
             doctype = s.get(Doctype, did)

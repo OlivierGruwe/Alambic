@@ -53,14 +53,10 @@ def _load_doctypes(config) -> dict:
     result: dict = {}
     settings = config.edenai_settings or {}
     # Source de vérité : expected_doctypes (avec obligatoire/optionnel). Repli sur
-    # l'ancien doctype_ids (settings) puis le doctype_id unique.
+    # l'ancien doctype_ids (settings) pour les configs antérieures.
     from alambic_core.services.completeness import doctype_ids_from_expected
 
-    doctype_ids = (
-        doctype_ids_from_expected(config)
-        or settings.get("doctype_ids")
-        or ([config.doctype_id] if config.doctype_id else [])
-    )
+    doctype_ids = doctype_ids_from_expected(config) or settings.get("doctype_ids") or []
 
     with session_scope() as s:
         if doctype_ids:
@@ -89,9 +85,7 @@ def _get_classifier(config) -> DocumentClassifier:
 
     ids_sig = ",".join(
         sorted(
-            doctype_ids_from_expected(config)
-            or settings.get("doctype_ids")
-            or ([config.doctype_id] if config.doctype_id else [])
+            doctype_ids_from_expected(config) or settings.get("doctype_ids") or []
         )
     )
     cache_key = f"{config.id}:{ids_sig}"
@@ -205,14 +199,22 @@ def classify_document(payload: dict) -> dict:
                 _threshold,
             )
             # Trace du coût même en cas de non-reconnaissance.
-            from alambic_core.services.cost_tracking import record_cost
+            from alambic_core.services.cost_tracking import (
+                classification_method,
+                record_cost,
+            )
 
+            _method = classification_method(result.source)
+            # Le provider réel n'existe que pour la part LLM (appel EdenAI) ; le
+            # vectoriel et le lexical sont des calculs locaux, sans fournisseur.
+            _provider = _settings.get("classifier_provider", "") if _method == "llm" else ""
             record_cost(
                 process=PROCESS_CLASSIFY,
                 amount=result.cost,
                 transaction_id=tx_id,
                 document_id=doc_id,
                 account_id=account_id,
+                provider=_provider,
                 source=result.source,
                 duration_ms=_dur_ms,
             )
@@ -233,14 +235,20 @@ def classify_document(payload: dict) -> dict:
                 d.doctype_desc = result.description or ""
 
         # Trace du coût : TOUJOURS écrite (même à 0), pour un suivi exhaustif.
-        from alambic_core.services.cost_tracking import record_cost
+        from alambic_core.services.cost_tracking import (
+            classification_method,
+            record_cost,
+        )
 
+        _method = classification_method(result.source)
+        _provider = _settings.get("classifier_provider", "") if _method == "llm" else ""
         record_cost(
             process=PROCESS_CLASSIFY,
             amount=result.cost,
             transaction_id=tx_id,
             document_id=doc_id,
             account_id=account_id,
+            provider=_provider,
             source=result.source,
             duration_ms=_dur_ms,
         )

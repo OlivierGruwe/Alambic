@@ -11,6 +11,7 @@ from alambic_core.db.session import get_sessionmaker
 from alambic_core.models import Account
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
+from ..config_schema import _is_placeholder_secret
 from ..forms import AccountForm
 from .auth import admin_required
 
@@ -50,7 +51,9 @@ def _block_to_form(form, account) -> None:
 
 def _apply_common_fields(acc, form) -> None:
     """Applique les champs communs (hors secret) du formulaire au modèle."""
-    acc.account_name = form.account_name.data
+    from alambic_core.domain.naming import to_snake_case
+
+    acc.account_name = to_snake_case(form.account_name.data)
     acc.active = form.active.data
     acc.address = _address_to_block(form)
     acc.zip = form.zip.data or ""
@@ -68,8 +71,9 @@ def create_account():
             acc = Account()
             _apply_common_fields(acc, form)
             # Secret : à la création, on pose la valeur saisie (si présente).
-            if form.edenai_secret_key.data:
-                acc.edenai_secret_key = form.edenai_secret_key.data
+            key_val = form.edenai_secret_key.data
+            if key_val and not _is_placeholder_secret(key_val):
+                acc.edenai_secret_key = key_val
             s.add(acc)
             s.commit()
         flash("Compte créé.", "success")
@@ -106,8 +110,9 @@ def edit_account(account_id: str):
         if form.validate_on_submit():
             _apply_common_fields(acc, form)
             # Secret masqué : vide = on conserve l'existant ; saisi = on remplace.
-            if form.edenai_secret_key.data:
-                acc.edenai_secret_key = form.edenai_secret_key.data
+            key_val = form.edenai_secret_key.data
+            if key_val and not _is_placeholder_secret(key_val):
+                acc.edenai_secret_key = key_val
             s.commit()
             flash("Compte mis à jour.", "success")
             return redirect(url_for("accounts.list_accounts"))

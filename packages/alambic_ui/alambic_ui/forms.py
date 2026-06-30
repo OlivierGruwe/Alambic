@@ -6,6 +6,7 @@ from flask_wtf import FlaskForm
 from wtforms import (
     BooleanField,
     HiddenField,
+    IntegerField,
     PasswordField,
     SelectField,
     StringField,
@@ -88,7 +89,6 @@ class ConfigForm(FlaskForm):
         "Nom de la configuration", validators=[DataRequired(), Length(max=255)]
     )
     account_id = SelectField("Compte", validators=[Optional()], choices=[])
-    doctype_id = SelectField("Doctype", validators=[Optional()], choices=[])
     need_validation = BooleanField("Validation requise", default=True)
     multi_doc_detect = BooleanField("Détection multi-documents", default=False)
     submit = SubmitField("Enregistrer")
@@ -117,3 +117,60 @@ class AcceptInviteForm(FlaskForm):
         validators=[DataRequired(), EqualTo("password", message="Les mots de passe diffèrent.")],
     )
     submit = SubmitField("Définir mon mot de passe")
+
+
+class MailConfigForm(FlaskForm):
+    """Configuration d'une boîte mail IMAP relevée périodiquement."""
+
+    id = HiddenField()
+    mailconfig_name = StringField("Nom", validators=[DataRequired(), Length(max=255)])
+    email_address = StringField("Adresse e-mail", validators=[DataRequired(), Length(max=320)])
+    # Rattachement au flux de traitement (config Alambic) + compte.
+    config_id = SelectField("Configuration cible", validators=[Optional()], choices=[])
+    account_id = SelectField("Compte", validators=[Optional()], choices=[])
+    is_active = BooleanField("Active", default=True)
+
+    # Connexion IMAP.
+    imap_server = StringField("Serveur IMAP", validators=[DataRequired(), Length(max=255)])
+    imap_port = IntegerField("Port", validators=[Optional()], default=993)
+    imap_password = PasswordField("Mot de passe", validators=[Optional()])
+    imap_inbox = StringField(
+        "Boîte (inbox)", validators=[Optional(), Length(max=255)], default="INBOX"
+    )
+    imap_search_criteria = StringField(
+        "Critère de recherche", validators=[Optional(), Length(max=255)], default="(UNSEEN)"
+    )
+    imap_alias = StringField("Alias (optionnel)", validators=[Optional(), Length(max=320)])
+
+    # Traitement du contenu.
+    content_mode = SelectField(
+        "Contenu à traiter",
+        choices=[
+            ("all", "Corps + pièces jointes"),
+            ("body", "Corps seulement"),
+            ("attachments", "Pièces jointes seulement"),
+        ],
+        default="all",
+    )
+    filter_attachment_extensions = StringField(
+        "Extensions autorisées (PJ)", validators=[Optional(), Length(max=1024)]
+    )
+    sender_whitelist = TextAreaField(
+        "Expéditeurs autorisés", validators=[Optional(), Length(max=4096)]
+    )
+
+    # Action post-traitement.
+    after_process_action = SelectField(
+        "Après traitement",
+        choices=[
+            ("seen", "Marquer comme lu"),
+            ("move", "Déplacer"),
+            ("delete", "Supprimer"),
+            ("none", "Ne rien faire"),
+        ],
+        default="seen",
+    )
+    after_process_folder = StringField(
+        "Dossier de destination", validators=[Optional(), Length(max=255)], default="ARCHIVE"
+    )
+    submit = SubmitField("Enregistrer")

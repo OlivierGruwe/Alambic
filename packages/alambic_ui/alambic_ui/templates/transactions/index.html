@@ -112,6 +112,9 @@
     border-top:1px solid var(--slate-100); }
   .btn-primary { background:var(--teal,#0FB3A6); color:#fff; border:none; }
   .val-msg { margin-top:10px; font-size:13px; }
+  .val-readonly { margin:8px 0; padding:8px 12px; border-radius:6px; font-size:13px;
+    background:var(--amber-50,#fffbeb); color:var(--amber-700,#b45309);
+    border:1px solid var(--amber-200,#fde68a); }
   .val-msg.ok { color:var(--success-600,#16a34a); }
   .val-msg.err { color:var(--danger-600,#dc2626); }
 </style>
@@ -311,8 +314,11 @@
       </div>
       <div class="val-fields">
         <div class="val-doctype" id="val-doctype">—</div>
+        <div id="val-readonly" class="val-readonly" style="display:none;">
+          Ce document est déjà exporté : il est en lecture seule et ne peut plus être modifié.
+        </div>
         <div id="val-fields-list"></div>
-        <div class="val-modal-actions">
+        <div class="val-modal-actions" id="val-actions">
           <button type="button" class="btn btn-light btn-sm" onclick="saveValidation(false)">Enregistrer</button>
           <button type="button" class="btn btn-primary btn-sm" onclick="saveValidation(true)">Valider</button>
         </div>
@@ -441,6 +447,16 @@ async function loadDocument(docId) {
     document.getElementById("val-doctype").textContent =
       "Type : " + (data.doctype || "—") + (data.doctype_desc ? " — " + data.doctype_desc : "");
     renderFields(data.indexes || []);
+
+    // Document exporté → lecture seule : on masque les boutons d'action et on
+    // signale clairement que le document ne peut plus être modifié.
+    const exported = data.status === "EXPORTED";
+    const actions = document.getElementById("val-actions");
+    const banner = document.getElementById("val-readonly");
+    if (actions) actions.style.display = exported ? "none" : "";
+    if (banner) banner.style.display = exported ? "block" : "none";
+    document.querySelectorAll("#val-fields-list input, #val-fields-list textarea")
+      .forEach((el) => { el.readOnly = exported; });
   } catch (e) {
     document.getElementById("val-fields-list").innerHTML = "<p>Erreur de chargement des champs.</p>";
   }
@@ -494,6 +510,12 @@ async function saveValidation(validate) {
       headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token() }}" },
       body: JSON.stringify({ indexes: collectFields() }),
     });
+    if (res.status === 409) {
+      // Document déjà exporté : lecture seule.
+      msg.className = "val-msg err";
+      msg.textContent = "Ce document est déjà exporté : il ne peut plus être modifié.";
+      return;
+    }
     if (!res.ok) throw new Error("HTTP " + res.status);
     msg.className = "val-msg ok";
     msg.textContent = validate ? "Document validé." : "Modifications enregistrées.";

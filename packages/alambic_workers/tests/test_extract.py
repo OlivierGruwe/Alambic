@@ -57,13 +57,14 @@ def test_extract_mixed_fields(monkeypatch):
                 account_id="acc1",
             )
         )
-        s.add(Config(id="cfg1", config_name="C", account_id="acc1", doctype_id="dt1"))
+        s.add(Config(id="cfg1", config_name="C", account_id="acc1", expected_doctypes=[{"doctype_id": "dt1", "required": True}]))
         s.add(
             Document(
                 id="doc1",
                 transaction_id="tx1",
                 status="OCR_DONE",
                 process="X",
+                doctype="facture",
                 ocr_markdown="Facture\nDate: 15/03/2024\nClient: ACME",
                 ocr_lines=[
                     {

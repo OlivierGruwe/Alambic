@@ -91,7 +91,7 @@
 {% macro secret(key, label, present, hint='') %}
   <div class="form-group">
     <label>{{ label }}</label>
-    <input type="password" name="{{ key }}" class="form-control" placeholder="{{ '••••••••' if present else '' }}">
+    <input type="password" name="{{ key }}" class="form-control" autocomplete="new-password" placeholder="{{ '••••••••' if present else '' }}">
     <div class="form-hint">{{ hint if hint else ('Une valeur est définie. Laissez vide pour la conserver.' if present else 'Aucune valeur définie.') }}</div>
   </div>
 {% endmacro %}
@@ -111,6 +111,8 @@
       <button type="button" class="tab" data-tab="reco">Reconnaissance</button>
       <button type="button" class="tab" data-tab="in">Entrées</button>
       <button type="button" class="tab" data-tab="out">Sorties</button>
+      <button type="button" class="tab" data-tab="propagated">Champs propagés</button>
+      <button type="button" class="tab" data-tab="consolidation">Consolidation WS</button>
     </div>
 
     <div class="tab-body">
@@ -163,17 +165,20 @@
           <div class="form-hint">Construit les endpoints (EU / global) et filtre les modèles disponibles.</div>
         </div>
         <div class="form-section-title">OCR</div>
+        {{ txt('ocr_end_point', 'Endpoint OCR (optionnel)', 'Laisser vide : construit depuis la région. Sinon, force l\'URL EdenAI OCR.') }}
         {{ provider_select('ocr_provider', 'Provider OCR', '', '', 'ocr') }}
         {{ sel_kv('ocr_language', 'Langue OCR', ocr_languages) }}
         {{ chk('ocr_treat_images', 'Traiter les images') }}
         {{ provider_select('fallback_ocr_provider', 'Provider OCR (fallback)', '', 'ocr_provider', 'ocr') }}
         <div class="form-section-title">Classification</div>
+        {{ txt('classifier_end_point', 'Endpoint classification (optionnel)', 'Laisser vide : construit depuis la région (LLM chat).') }}
         {{ provider_select('classifier_provider', 'Provider', 'classifier_model', '', 'classifier') }}
         {{ model_select('classifier_model', 'Modèle', 'classifier_provider', 'classifier') }}
         {{ slider('classifier_confidence_level', 'Seuil de confiance') }}
         {{ provider_select('fallback_classifier_provider', 'Provider (fallback)', 'fallback_classifier_model', 'classifier_provider', 'classifier') }}
         {{ model_select('fallback_classifier_model', 'Modèle (fallback)', 'fallback_classifier_provider', 'classifier') }}
         <div class="form-section-title">Extraction</div>
+        {{ txt('extract_end_point', 'Endpoint extraction (optionnel)', 'Laisser vide : construit depuis la région (LLM chat).') }}
         {{ provider_select('extract_provider', 'Provider', 'extract_model', '', 'extract') }}
         {{ model_select('extract_model', 'Modèle', 'extract_provider', 'extract') }}
         {{ provider_select('fallback_extract_provider', 'Provider (fallback)', 'fallback_extract_model', 'extract_provider', 'extract') }}
@@ -188,8 +193,7 @@
 
       <!-- RECONNAISSANCE -->
       <div class="tab-panel" data-panel="reco">
-        {{ txt_list('object_detection_provider', 'Détection d\'objets — provider', 'dl-od-providers') }}
-        {{ txt_list('fallback_object_detection_provider', 'Détection d\'objets — fallback', 'dl-od-providers') }}
+        {{ txt('vision_end_point', 'Endpoint vision (optionnel)', 'Laisser vide : construit depuis la région (LLM chat). Sinon, force l\'URL pour la détection multi-document.') }}
         {{ provider_select('vision_llm_provider', 'Vision LLM — provider', 'vision_llm_model') }}
         {{ model_select('vision_llm_model', 'Vision LLM — modèle', 'vision_llm_provider') }}
         {{ provider_select('fallback_vision_llm_provider', 'Vision LLM — provider (fallback)', 'fallback_vision_llm_model', 'vision_llm_provider') }}
@@ -269,6 +273,101 @@
           {{ chk('export_verify_ssl', 'Vérifier le certificat SSL') }}
         </div>
       </div>
+
+      <div class="tab-panel" data-panel="propagated">
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Champs propagés à la transaction</label>
+          <div class="edt-callout">
+            <strong>À quoi ça sert</strong>
+            <ul>
+              <li>Ces champs sont attachés au dépôt et <b>hérités par tous les documents</b> de la transaction — y compris les pièces qui ne portent pas ces informations elles-mêmes.</li>
+              <li><b>Information mail</b> : récupère une donnée de l'e-mail source (expéditeur, objet, date). Utile quand le dépôt vient d'un e-mail.</li>
+              <li><b>Calculé</b> : valeur générée au traitement (<code>@today</code>, <code>@now</code>, <code>@year_month</code>, <code>@transaction_id</code>, <code>@config_name</code>).</li>
+            </ul>
+          </div>
+
+          <details class="edt-help">
+            <summary>Comment ça marche, étape par étape</summary>
+            <ol class="edt-steps">
+              <li>À l'arrivée d'un dépôt, chaque champ propagé est résolu une fois pour la transaction.</li>
+              <li><b>Information mail</b> : la valeur est lue dans les métadonnées de la source (ex. <code>from</code> → l'adresse de l'expéditeur). Si la source ne fournit pas la donnée, la <b>valeur par défaut</b> est utilisée.</li>
+              <li><b>Calculé</b> : la valeur est générée (ex. <code>@today</code> → <code>2026_06_30</code>).</li>
+              <li>La valeur résolue est ajoutée comme index à <b>chaque document</b> de la transaction, sous le <b>nom du champ</b>. Les sous-documents issus d'un découpage en héritent aussi.</li>
+            </ol>
+          </details>
+
+          <table class="cf-table" id="cf-table">
+            <thead>
+              <tr>
+                <th title="Nom de l'index créé sur chaque document. Sans espace. Ex. email_from, date_traitement">Nom du champ</th>
+                <th title="Libellé lisible affiché aux validateurs. Ex. Expéditeur">Description</th>
+                <th title="D'où vient la valeur : une donnée de l'e-mail source, ou une valeur calculée">Source</th>
+                <th title="La donnée précise : une clé d'e-mail (from, subject…) ou un token calculé (@today…)">Donnée</th>
+                <th title="Valeur utilisée si la donnée source est absente. Laisser vide si non pertinent.">Valeur par défaut</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="cf-body"><!-- lignes injectées en JS --></tbody>
+          </table>
+          <div id="cf-empty" class="cf-empty">Aucun champ propagé. Cliquez sur « Ajouter un champ ».</div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="cfAddRow()" style="margin-top:10px;">+ Ajouter un champ</button>
+          <input type="hidden" name="config_fields" id="config-fields-input"
+                 value="{{ values.get('config_fields', '[]') }}">
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="consolidation">
+        <div class="form-group" style="grid-column:1/-1;">
+          <label>Web services de consolidation</label>
+          <div class="edt-callout">
+            <strong>À quoi ça sert</strong>
+            <ul>
+              <li>Définir des web services externes appelés pour <b>valider ou enrichir</b> un champ extrait (ex. vérifier un numéro de compte et récupérer le titulaire).</li>
+              <li>Chaque WS cible <b>un champ précis</b> d'un doctype attendu, choisi dans la colonne « Champ cible » (format <code>@doctype:champ</code>). Tout se règle ici, rien à configurer côté Types de documents.</li>
+              <li><b>Sécurité</b> : seuls les domaines autorisés au niveau du compte sont appelables, le secret est chiffré. En cas d'échec, le réglage « Si échec » décide (ignorer = non bloquant, par défaut).</li>
+            </ul>
+          </div>
+
+          <details class="edt-help">
+            <summary>Comment ça marche, étape par étape</summary>
+            <ol class="edt-steps">
+              <li>L'extraction trouve la valeur d'un champ (ex. <code>numero_compte = "FR7612345"</code>).</li>
+              <li>Si ce champ référence un WS, Alambic appelle l'URL en remplaçant <code>{value}</code> par la valeur extraite : <code>https://api.banque.fr/comptes/FR7612345</code>.</li>
+              <li>Le WS répond en JSON, ex. <code>{ "exists": true, "titulaire": "Dupont", "agence": "Lyon 3e" }</code>.</li>
+              <li>La <b>clé statut</b> (ici <code>exists</code>) indique si la donnée est valide → un index <code>numero_compte__consolidation_status</code> vaut <code>VALID</code>, <code>INVALID</code> ou <code>ERROR</code>.</li>
+              <li>Le <b>mapping réponse</b> ajoute les données reçues au document comme nouveaux index. <code>titulaire:compte_titulaire</code> crée un index <code>compte_titulaire = "Dupont"</code>.</li>
+            </ol>
+          </details>
+
+          <table class="cf-table" id="cw-table">
+            <thead>
+              <tr>
+                <th title="Identifiant du WS. Sans espace. Ex. verif_compte">Nom</th>
+                <th title="Le champ dont la valeur est envoyée au WS, au format @doctype:champ. Choisi parmi les champs des doctypes attendus de cette config.">Champ cible</th>
+                <th title="URL du service. Utilisez {value} là où la valeur du champ doit être insérée.">URL ({value})</th>
+                <th title="GET (valeur dans l'URL) ou POST (valeur dans le corps JSON)">Méthode</th>
+                <th title="Clé de la réponse JSON qui dit si la donnée est valide (ex. found, exists).">Clé statut</th>
+                <th title="Quelles données de la réponse deviennent des index. Format clé_réponse:nom_index, séparés par des virgules.">Mapping réponse</th>
+                <th title="Si le WS est injoignable : Ignorer (non bloquant) ou Bloquer (document en erreur)">Si échec</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="cw-body"><!-- lignes injectées en JS --></tbody>
+          </table>
+          <div id="cw-empty" class="cf-empty">Aucun web service. Cliquez sur « Ajouter un WS ».</div>
+          <div class="form-hint" style="margin-top:6px;">
+            <b>Mapping réponse</b> : <code>clé_réponse:nom_index</code> séparés par des virgules.
+            Ex. <code>titulaire:compte_titulaire, agence:compte_agence</code> — chaque paire ajoute un index au document.
+          </div>
+          <div class="form-hint" style="margin-top:4px;">
+            <b>Astuce</b> : le secret d'authentification (clé d'API, token) et les domaines autorisés se règlent au niveau du compte, pas ici.
+          </div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="cwAddRow()" style="margin-top:10px;">+ Ajouter un WS</button>
+          <input type="hidden" name="consolidation_ws" id="consolidation-ws-input"
+                 value="{{ values.get('consolidation_ws', '[]') }}">
+          <script type="application/json" id="cw-doctype-fields">{{ (doctype_fields or {}) | tojson }}</script>
+        </div>
+      </div>
     </div>
 
     <div class="form-actions" style="padding:0 28px 28px;">
@@ -282,7 +381,6 @@
 <datalist id="dl-llm-providers">{% for p in llm_providers %}<option value="{{ p }}">{% endfor %}</datalist>
 <datalist id="dl-llm-models">{% for m in llm_models %}<option value="{{ m }}">{% endfor %}</datalist>
 
-<datalist id="dl-od-providers">{% for p in object_detection_providers %}<option value="{{ p }}">{% endfor %}</datalist>
 
 <script>
   // Onglets
@@ -411,11 +509,37 @@
         // Changement de région : réinitialiser les sélections devenues invalides.
         document.querySelectorAll('.provider-select').forEach(function(s) { fillProviderSelect(s, false); });
         document.querySelectorAll('.model-select').forEach(function(m) { fillModelSelect(m, false); });
+        updateEndpointPlaceholders();
       });
     }
     // Chargement initial : conserver les valeurs enregistrées (keepInvalid=true).
     document.querySelectorAll('.provider-select').forEach(function(s) { fillProviderSelect(s, true); });
     document.querySelectorAll('.model-select').forEach(function(m) { fillModelSelect(m, true); });
+    updateEndpointPlaceholders();
+  }
+
+  // Met à jour le placeholder (texte grisé) des champs endpoint selon la région
+  // sélectionnée : l'utilisateur voit l'URL qui sera utilisée s'il laisse le champ
+  // vide (repli région au runtime), sans figer la valeur — il reste libre de forcer.
+  function endpointBase(region) {
+    // Miroir de _base() côté Python : préfixe 'eu.' sauf région 'global'.
+    var prefix = (region === 'global') ? '' : 'eu.';
+    return 'https://api.' + prefix + 'edenai.run';
+  }
+  function updateEndpointPlaceholders() {
+    var region = currentRegion() || 'eu';  // vide (« toutes ») → eu par défaut
+    var base = endpointBase(region);
+    // feature → chemin v3 (miroir de FEATURE_PATHS côté Python).
+    var paths = {
+      'ocr_end_point': '/v3/universal-ai',
+      'classifier_end_point': '/v3/llm/chat/completions',
+      'extract_end_point': '/v3/llm/chat/completions',
+      'vision_end_point': '/v3/chat/completions'
+    };
+    Object.keys(paths).forEach(function(name) {
+      var el = document.querySelector('input[name="' + name + '"]');
+      if (el) { el.setAttribute('placeholder', base + paths[name]); }
+    });
   }
 
   document.querySelectorAll('.provider-select').forEach(function(sel) {
@@ -556,5 +680,205 @@
     accountSel.addEventListener('change', function() { onAccountChange(this.value); });
     onAccountChange(accountSel.value);  // au chargement
   }
+// ── Champs propagés (table éditable) ──────────────────────────────────────
+var CF_SOURCES = [
+  { value: "context", label: "Information mail" },
+  { value: "computed", label: "Calculé" },
+];
+var CF_TOKENS = ["@today", "@now", "@year_month", "@datetime", "@transaction_id", "@config_name"];
+
+function cfReadInput() {
+  try { return JSON.parse(document.getElementById('config-fields-input').value || '[]'); }
+  catch (e) { return []; }
+}
+
+function cfWriteInput() {
+  var rows = document.querySelectorAll('#cf-body tr');
+  var out = [];
+  rows.forEach(function(tr) {
+    var name = tr.querySelector('.cf-name').value.trim();
+    if (!name) return;
+    out.push({
+      field_name: name,
+      field_label: tr.querySelector('.cf-label').value.trim(),
+      source_type: tr.querySelector('.cf-source').value,
+      source_key: tr.querySelector('.cf-key').value.trim(),
+      default_value: tr.querySelector('.cf-default').value,
+    });
+  });
+  document.getElementById('config-fields-input').value = JSON.stringify(out);
+  document.getElementById('cf-empty').style.display = out.length ? 'none' : 'block';
+}
+
+// Suggestions de clés contexte courantes (email) — champ libre.
+var CF_CONTEXT_HINTS = ["from", "to", "subject", "date", "cc", "message_id"];
+
+function cfRenderKeyCell(td, sourceType, currentValue) {
+  // Reconstruit la cellule « Donnée » selon la source.
+  if (sourceType === "computed") {
+    // Tokens calculés → menu déroulant fermé (valeurs connues).
+    var opts = CF_TOKENS.map(function(t) {
+      return '<option value="' + t + '"' + (currentValue === t ? ' selected' : '') + '>' + t + '</option>';
+    }).join('');
+    td.innerHTML = '<select class="cf-key form-control">' + opts + '</select>';
+  } else {
+    // Information mail → champ libre avec suggestions (datalist).
+    td.innerHTML = '<input class="cf-key form-control" value="' + (currentValue || '') +
+      '" placeholder="from, subject, date…" list="cf-ctx-hints">';
+  }
+  // (Re)brancher la sérialisation sur le nouvel élément.
+  var el = td.querySelector('.cf-key');
+  el.addEventListener('change', cfWriteInput);
+  el.addEventListener('input', cfWriteInput);
+}
+
+function cfAddRow(field) {
+  field = field || {};
+  var sourceType = field.source_type || 'context';
+  var tr = document.createElement('tr');
+  var sourceOpts = CF_SOURCES.map(function(s) {
+    return '<option value="' + s.value + '"' + (sourceType === s.value ? ' selected' : '') + '>' + s.label + '</option>';
+  }).join('');
+  tr.innerHTML =
+    '<td><input class="cf-name form-control" value="' + (field.field_name || '') + '" placeholder="email_from"></td>' +
+    '<td><input class="cf-label form-control" value="' + (field.field_label || '') + '" placeholder="Expéditeur"></td>' +
+    '<td><select class="cf-source form-control">' + sourceOpts + '</select></td>' +
+    '<td class="cf-key-cell"></td>' +
+    '<td><input class="cf-default form-control" value="' + (field.default_value || '') + '"></td>' +
+    '<td><button type="button" class="btn btn-ghost btn-sm" title="Retirer">×</button></td>';
+
+  // Cellule « Donnée » initiale selon la source.
+  var keyCell = tr.querySelector('.cf-key-cell');
+  cfRenderKeyCell(keyCell, sourceType, field.source_key || '');
+
+  // Changement de source → on reconstruit la cellule « Donnée ».
+  var sourceSel = tr.querySelector('.cf-source');
+  sourceSel.addEventListener('change', function() {
+    cfRenderKeyCell(keyCell, sourceSel.value, '');  // reset la valeur (référentiels différents)
+    cfWriteInput();
+  });
+
+  tr.querySelector('button').addEventListener('click', function() { tr.remove(); cfWriteInput(); });
+  // Sérialisation sur les champs fixes (name/label/source/default).
+  tr.querySelectorAll('.cf-name, .cf-label, .cf-source, .cf-default').forEach(function(el) {
+    el.addEventListener('change', cfWriteInput);
+    el.addEventListener('input', cfWriteInput);
+  });
+  document.getElementById('cf-body').appendChild(tr);
+  cfWriteInput();
+}
+
+(function cfInit() {
+  // Datalist de suggestions pour les clés contexte (email).
+  if (!document.getElementById('cf-ctx-hints')) {
+    var dl = document.createElement('datalist');
+    dl.id = 'cf-ctx-hints';
+    dl.innerHTML = CF_CONTEXT_HINTS.map(function(t) { return '<option value="' + t + '">'; }).join('');
+    document.body.appendChild(dl);
+  }
+  cfReadInput().forEach(cfAddRow);
+  cfWriteInput();
+})();
+// ── Web services de consolidation (table éditable) ────────────────────────
+function cwReadInput() {
+  try { return JSON.parse(document.getElementById('consolidation-ws-input').value || '[]'); }
+  catch (e) { return []; }
+}
+
+// Champs disponibles par doctype, pour le select « champ cible ».
+function cwDoctypeFields() {
+  try { return JSON.parse(document.getElementById('cw-doctype-fields').textContent || '{}'); }
+  catch (e) { return {}; }
+}
+
+function cwTargetOptions(selected) {
+  var byDoctype = cwDoctypeFields();
+  var opts = '<option value="">— choisir un champ —</option>';
+  Object.keys(byDoctype).forEach(function(dt) {
+    var group = '<optgroup label="' + dt + '">';
+    byDoctype[dt].forEach(function(f) {
+      var val = '@' + dt + ':' + f;
+      group += '<option value="' + val + '"' + (selected === val ? ' selected' : '') + '>' + val + '</option>';
+    });
+    group += '</optgroup>';
+    opts += group;
+  });
+  // Si la valeur enregistrée n'est plus dans la liste (doctype retiré), on la garde.
+  if (selected && opts.indexOf('value="' + selected + '"') === -1) {
+    opts += '<option value="' + selected + '" selected>' + selected + ' (introuvable)</option>';
+  }
+  return opts;
+}
+
+function cwMappingToStr(mapping) {
+  if (!mapping || typeof mapping !== 'object') return '';
+  return Object.keys(mapping).map(function(k) { return k + ':' + mapping[k]; }).join(', ');
+}
+
+function cwStrToMapping(str) {
+  var out = {};
+  (str || '').split(',').forEach(function(pair) {
+    var parts = pair.split(':');
+    if (parts.length === 2) {
+      var k = parts[0].trim(), v = parts[1].trim();
+      if (k && v) out[k] = v;
+    }
+  });
+  return out;
+}
+
+function cwWriteInput() {
+  var rows = document.querySelectorAll('#cw-body tr');
+  var out = [];
+  rows.forEach(function(tr) {
+    var name = tr.querySelector('.cw-name').value.trim();
+    if (!name) return;
+    out.push({
+      name: name,
+      target_field: tr.querySelector('.cw-target').value,
+      url: tr.querySelector('.cw-url').value.trim(),
+      method: tr.querySelector('.cw-method').value,
+      response_status_path: tr.querySelector('.cw-status').value.trim(),
+      response_mapping: cwStrToMapping(tr.querySelector('.cw-mapping').value),
+      on_failure: tr.querySelector('.cw-failure').value,
+    });
+  });
+  document.getElementById('consolidation-ws-input').value = JSON.stringify(out);
+  document.getElementById('cw-empty').style.display = out.length ? 'none' : 'block';
+}
+
+function cwAddRow(ws) {
+  ws = ws || {};
+  var tr = document.createElement('tr');
+  var method = ws.method || 'GET';
+  var onFailure = ws.on_failure || 'skip';
+  tr.innerHTML =
+    '<td><input class="cw-name form-control" value="' + (ws.name || '') + '" placeholder="verif_compte"></td>' +
+    '<td><select class="cw-target form-control">' + cwTargetOptions(ws.target_field || '') + '</select></td>' +
+    '<td><input class="cw-url form-control" value="' + (ws.url || '') + '" placeholder="https://api.fr/{value}"></td>' +
+    '<td><select class="cw-method form-control">' +
+      '<option value="GET"' + (method === 'GET' ? ' selected' : '') + '>GET</option>' +
+      '<option value="POST"' + (method === 'POST' ? ' selected' : '') + '>POST</option>' +
+    '</select></td>' +
+    '<td><input class="cw-status form-control" value="' + (ws.response_status_path || '') + '" placeholder="found"></td>' +
+    '<td><input class="cw-mapping form-control" value="' + cwMappingToStr(ws.response_mapping) + '" placeholder="titulaire:compte_titulaire"></td>' +
+    '<td><select class="cw-failure form-control">' +
+      '<option value="skip"' + (onFailure === 'skip' ? ' selected' : '') + '>Ignorer</option>' +
+      '<option value="error"' + (onFailure === 'error' ? ' selected' : '') + '>Bloquer</option>' +
+    '</select></td>' +
+    '<td><button type="button" class="btn btn-ghost btn-sm" title="Retirer">×</button></td>';
+  tr.querySelector('button').addEventListener('click', function() { tr.remove(); cwWriteInput(); });
+  tr.querySelectorAll('input,select').forEach(function(el) {
+    el.addEventListener('change', cwWriteInput);
+    el.addEventListener('input', cwWriteInput);
+  });
+  document.getElementById('cw-body').appendChild(tr);
+  cwWriteInput();
+}
+
+(function cwInit() {
+  cwReadInput().forEach(cwAddRow);
+  cwWriteInput();
+})();
 </script>
 {% endblock %}

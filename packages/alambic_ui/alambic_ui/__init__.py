@@ -87,6 +87,7 @@ def create_app(config_object: type[Config] = Config) -> Flask:
     from .blueprints.dashboard import dashboard_bp
     from .blueprints.doctypes import doctypes_bp
     from .blueprints.invite import invite_bp
+    from .blueprints.mail_configs import mail_configs_bp
     from .blueprints.transactions import transactions_bp
     from .blueprints.users import users_bp
 
@@ -96,6 +97,7 @@ def create_app(config_object: type[Config] = Config) -> Flask:
     app.register_blueprint(users_bp)
     app.register_blueprint(doctypes_bp)
     app.register_blueprint(configs_bp)
+    app.register_blueprint(mail_configs_bp)
     app.register_blueprint(transactions_bp)
     app.register_blueprint(invite_bp)
 

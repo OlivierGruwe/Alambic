@@ -14,7 +14,7 @@
         <td>
           {% if d.status in ("PENDING_VALIDATION", "DATA_EXTRACTED_AI", "VALIDATED", "EXPORTED") %}
             <button type="button" class="doc-validate-btn" onclick="openValidation('{{ tx_id }}', '{{ d.id }}')">
-              {{ "Revoir" if d.status in ("VALIDATED", "EXPORTED") else "Valider" }}
+              {{ "Consulter" if d.status == "EXPORTED" else ("Revoir" if d.status == "VALIDATED" else "Valider") }}
             </button>
           {% endif %}
         </td>

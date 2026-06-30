@@ -9,7 +9,7 @@ sérialisée en json_content via doctype_schema.
 from __future__ import annotations
 
 from alambic_core.db.session import get_sessionmaker
-from alambic_core.models import Account, Doctype
+from alambic_core.models import Account, Config, Doctype
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
@@ -63,6 +63,8 @@ def _fields_from_post(form_data) -> list[dict]:
             if idx.isdigit() and attr in keys:
                 indices.add(int(idx))
 
+    from alambic_core.domain.naming import to_snake_case
+
     fields = []
     for i in sorted(indices):
         field = {}
@@ -72,6 +74,8 @@ def _fields_from_post(form_data) -> list[dict]:
                 field[key] = field_name in form_data  # présent = coché
             else:
                 field[key] = form_data.get(field_name, "")
+        # Le nom de champ est une clé technique : normalisé en snake_case.
+        field["field_name"] = to_snake_case(field.get("field_name", ""))
         # Ignorer un champ entièrement vide (ligne ajoutée puis non remplie).
         if field.get("field_name", "").strip():
             fields.append(field)
@@ -103,10 +107,13 @@ def create_doctype():
         _populate_account_choices(form, s)
 
         if form.validate_on_submit():
+            from alambic_core.domain.naming import to_snake_case
+
+            dt_name = to_snake_case(form.doctype_name.data)
             fields = _fields_from_post(request.form)
-            json_content = build_json_content(form.doctype_name.data, fields)
+            json_content = build_json_content(dt_name, fields)
             dt = Doctype(
-                doctype_name=form.doctype_name.data,
+                doctype_name=dt_name,
                 is_public=form.is_public.data,
                 account_id=form.account_id.data or None,
                 json_content=json_content,
@@ -139,11 +146,14 @@ def edit_doctype(doctype_id: str):
         _populate_account_choices(form, s)
 
         if form.validate_on_submit():
+            from alambic_core.domain.naming import to_snake_case
+
+            dt_name = to_snake_case(form.doctype_name.data)
             fields = _fields_from_post(request.form)
-            dt.doctype_name = form.doctype_name.data
+            dt.doctype_name = dt_name
             dt.is_public = form.is_public.data
             dt.account_id = form.account_id.data or None
-            dt.json_content = build_json_content(form.doctype_name.data, fields)
+            dt.json_content = build_json_content(dt_name, fields)
             s.commit()
             flash("Doctype mis à jour.", "success")
             return redirect(url_for("doctypes.list_doctypes"))
@@ -167,17 +177,18 @@ def edit_doctype(doctype_id: str):
 @doctypes_bp.route("/generate-fields", methods=["POST"])
 @admin_required
 def generate_fields():
-    """Génère des champs depuis un PDF uploadé (via EdenAI → Mistral).
+    """Génère des champs depuis un PDF uploadé (via EdenAI → LLM d'extraction).
 
-    Renvoie du JSON : {"fields": [...]} en cas de succès, {"error": "..."} sinon.
-    Appelé en AJAX par l'éditeur de doctype.
+    Les paramètres EdenAI (endpoint, provider, modèle, clé) sont lus depuis une
+    CONFIG : celle passée en `config_id`, sinon la première config active du
+    compte. On réutilise les mêmes réglages que le pipeline d'extraction plutôt
+    qu'une variable d'environnement séparée.
+
+    Renvoie {"fields": [...]} en succès, {"error": "..."} sinon (AJAX).
     """
     from flask import jsonify
 
-    from ..doctype_generator import (
-        GenerationError,
-        generate_fields_from_pdf,
-    )
+    from ..doctype_generator import GenerationError, generate_fields_from_pdf
 
     file = request.files.get("pdf")
     if file is None or not file.filename:
@@ -185,21 +196,56 @@ def generate_fields():
 
     pdf_bytes = file.read()
 
-    # Endpoint + clé : à terme depuis la config IA. Pour l'instant, clé EdenAI du
-    # compte sélectionné (ou du compte de l'admin). Endpoint depuis l'env.
-    import os
+    # Résolution des paramètres EdenAI depuis une config.
+    from alambic_core.ai.edenai_endpoints import endpoint_for
+    from alambic_core.ai.edenai_ocr import resolve_edenai_secret
 
-    endpoint = os.environ.get("ALAMBIC_EDENAI_ENDPOINT", "")
-    account_id = request.form.get("account_id") or current_user.account_id
+    endpoint = ""
     secret_key = ""
-    if account_id:
-        with _session() as s:
-            acc = s.get(Account, account_id)
-            if acc is not None:
-                secret_key = acc.edenai_secret_key or ""
+    provider = ""
+    model = ""
+
+    config_id = request.form.get("config_id") or ""
+    account_id = request.form.get("account_id") or current_user.account_id
+
+    with _session() as s:
+        cfg = None
+        if config_id:
+            cfg = s.get(Config, config_id)
+        if cfg is None and account_id:
+            # Première config active du compte (réglages EdenAI partagés).
+            cfg = (
+                s.query(Config)
+                .filter(Config.account_id == account_id, Config.is_active.is_(True))
+                .order_by(Config.config_name)
+                .first()
+            )
+        if cfg is not None:
+            settings = cfg.edenai_settings or {}
+            region = settings.get("region", "") or "eu"
+            endpoint = settings.get("extract_end_point", "") or endpoint_for("extract", region)
+            provider = settings.get("extract_provider", "") or ""
+            model = settings.get("extract_model", "") or ""
+            secret_key = resolve_edenai_secret(cfg) or ""
+
+    if not endpoint or not secret_key:
+        return jsonify(
+            {
+                "error": (
+                    "La génération par IA n'est pas configurée pour ce compte. "
+                    "Vérifiez qu'une configuration active existe avec une clé EdenAI "
+                    "et des réglages d'extraction renseignés, puis réessayez."
+                )
+            }
+        ), 200
 
     try:
-        fields = generate_fields_from_pdf(pdf_bytes, endpoint=endpoint, secret_key=secret_key)
+        kwargs = {"endpoint": endpoint, "secret_key": secret_key}
+        if provider:
+            kwargs["provider"] = provider
+        if model:
+            kwargs["model"] = model
+        fields = generate_fields_from_pdf(pdf_bytes, **kwargs)
     except GenerationError as exc:
         return jsonify({"error": str(exc)}), 200  # 200 : message géré côté UI
 

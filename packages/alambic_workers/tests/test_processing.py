@@ -129,9 +129,17 @@ def test_chain_routing():
         P.read_cab.run(_payload())
     with (
         patch("alambic_workers.tasks.ocr.read_ocr_document", side_effect=lambda p: p),
-        patch.object(P.detect_split, "apply_async", side_effect=_cap("read_ocr")),
+        patch.object(P.multi_doc, "apply_async", side_effect=_cap("read_ocr")),
     ):
         P.read_ocr.run(_payload())
+    with (
+        patch(
+            "alambic_workers.tasks.multi_doc.detect_multi_doc",
+            side_effect=lambda p: {**p, "children": []},
+        ),
+        patch.object(P.detect_split, "apply_async", side_effect=_cap("multi_doc")),
+    ):
+        P.multi_doc.run(_payload())
     with (
         patch(
             "alambic_workers.tasks.split.split_document",
@@ -153,7 +161,8 @@ def test_chain_routing():
 
     assert seen["convert"] == "cab"
     assert seen["read_cab"] == "ocr"
-    assert seen["read_ocr"] == "normal"
+    assert seen["read_ocr"] == "multidoc"
+    assert seen["multi_doc"] == "normal"
     assert seen["detect_split"] == "classif"
     assert seen["classify"] == "extract"
     assert seen["extract_fields"] == "normal"

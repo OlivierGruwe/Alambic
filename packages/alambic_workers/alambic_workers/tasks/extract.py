@@ -48,8 +48,7 @@ def _doctype_fields(config, doc_id: str) -> tuple[list, str, str]:
 
     Source de vérité : document.doctype (le type déterminé par la classification
     pour CE document), résolu en Doctype dans le périmètre du compte de la config
-    (doctypes publics + ceux du compte). Repli sur config.doctype_id pour les
-    anciennes configs mono-doctype. Lit doctype.json_content (JSON {fields,
+    (doctypes publics + ceux du compte). Lit doctype.json_content (JSON {fields,
     description}). Renvoie ([], "", "") si rien d'exploitable.
     """
     from sqlalchemy import or_
@@ -68,10 +67,6 @@ def _doctype_fields(config, doc_id: str) -> tuple[list, str, str]:
                     or_(Doctype.is_public.is_(True), Doctype.account_id == config.account_id)
                 )
             dt = q.first()
-
-        # 2. Repli : ancien doctype_id de la config (compat mono-doctype).
-        if dt is None and getattr(config, "doctype_id", ""):
-            dt = s.get(Doctype, config.doctype_id)
 
         if dt is None:
             return [], "", ""
@@ -160,7 +155,9 @@ def _persist_extraction(doc_id, tx_id, account_id, indexes, summary, config) -> 
                 s.add(
                     DocumentIndex(
                         document_id=doc_id,
-                        index_type="extracted",
+                        # Les index extraits sont "extracted" ; ceux issus de
+                        # l'enrichissement WS portent leur propre type (metadata).
+                        index_type=idx.get("index_type") or "extracted",
                         index_name=idx["index_name"],
                         index_value=str(idx.get("index_value") or ""),
                         index_score=str(idx.get("index_score") or ""),
@@ -246,6 +243,39 @@ def extract_document(payload: dict) -> dict:
         for idx in conventional_indexes + llm_indexes:
             merged[idx["index_name"]] = idx
         all_indexes = list(merged.values())
+
+        # ── Enrichissement par WS de consolidation ──────────────────────────
+        # Pour chaque champ référençant un WS (champ "consolidation_ws"), on
+        # appelle le service externe avec la valeur extraite et on ajoute les
+        # données reçues comme index metadata. Tolérant : un WS HS est sauté
+        # (sauf on_failure="error"), avec un message tracé.
+        ws_definitions = (getattr(config, "consolidation_ws", None) or []) if config else []
+        if ws_definitions:
+            from alambic_core.models import Account
+            from alambic_core.security.url_guard import parse_allowed_domains
+            from alambic_core.services.consolidation import enrich_indexes
+
+            with session_scope() as s:
+                account = s.get(Account, config.account_id) if config.account_id else None
+                allowed_domains = parse_allowed_domains(
+                    account.enrich_allowed_domains if account is not None else ""
+                )
+            try:
+                enrich_idx, enrich_msgs = enrich_indexes(
+                    extracted_indexes=all_indexes,
+                    doctype=doctype_name,
+                    ws_definitions=ws_definitions,
+                    allowed_domains=allowed_domains,
+                )
+                for ei in enrich_idx:
+                    merged[ei["index_name"]] = ei
+                all_indexes = list(merged.values())
+                for m in enrich_msgs:
+                    logger.warning("Enrichissement %s : %s", doc_id, m)
+            except RuntimeError as exc:
+                # WS bloquant (on_failure="error") en échec.
+                logger.error("Enrichissement bloquant échoué pour %s : %s", doc_id, exc)
+                raise
 
         summary = compute_extraction_summary(all_indexes, fields)
         _persist_extraction(doc_id, tx_id, account_id, all_indexes, summary, config)

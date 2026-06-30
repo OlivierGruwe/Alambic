@@ -512,6 +512,7 @@ def document_indexes(doc_id: str):
 @admin_required
 def document_validate(doc_id: str):
     """Enregistre les corrections d'index et valide le document (→ VALIDATED)."""
+    from alambic_core.domain.enums import DocumentStatus
     from alambic_core.models import Document
     from alambic_core.services.validation import validate_document
 
@@ -526,6 +527,10 @@ def document_validate(doc_id: str):
             tx = doc.transaction
             if tx is not None and tx.account_id != current_user.account_id:
                 abort(403)
+        # Un document exporté a quitté le système : il est en lecture seule pour
+        # éviter toute divergence avec la version partie en sortie.
+        if doc.status == DocumentStatus.EXPORTED.value:
+            return jsonify({"error": "document_exporte", "message": "Document déjà exporté."}), 409
         ok = validate_document(s, doc_id, indexes=indexes)
         if not ok:
             abort(404)
@@ -552,6 +557,7 @@ def document_validate(doc_id: str):
 @admin_required
 def document_save(doc_id: str):
     """Enregistre les corrections d'index sans valider (bouton Enregistrer)."""
+    from alambic_core.domain.enums import DocumentStatus
     from alambic_core.models import Document
     from alambic_core.services.validation import save_indexes
 
@@ -566,6 +572,9 @@ def document_save(doc_id: str):
             tx = doc.transaction
             if tx is not None and tx.account_id != current_user.account_id:
                 abort(403)
+        # Document exporté = lecture seule (cf. document_validate).
+        if doc.status == DocumentStatus.EXPORTED.value:
+            return jsonify({"error": "document_exporte", "message": "Document déjà exporté."}), 409
         written = save_indexes(s, doc_id, indexes)
         s.commit()
     return jsonify({"document_id": doc_id, "saved": written})

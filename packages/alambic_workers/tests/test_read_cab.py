@@ -73,7 +73,7 @@ def core_db():
             json_content=json.dumps({"fields": [{"field_name": "no", "bcr_type": "Code128"}]}),
         )
         s.add(dt)
-        s.add(Config(id="cfg1", config_name="c", doctype_id="dt1"))
+        s.add(Config(id="cfg1", config_name="c", expected_doctypes=[{"doctype_id": "dt1", "required": True}]))
         s.commit()
 
     yield Sess

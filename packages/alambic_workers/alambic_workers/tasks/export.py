@@ -111,8 +111,9 @@ def export_document(doc_id: str) -> dict:
     # 3) Exporter (le document est rechargé pour construire le payload à jour).
     with session_scope() as s:
         doc = s.get(Document, doc_id)
-        tx_fields = []  # champs hérités de transaction (à brancher ultérieurement)
-        result = run_export(pdf_bytes, doc, export_cfg, transaction_fields=tx_fields)
+        # transaction_fields=None : build_payload dérive les champs hérités
+        # (propagés + enrichissement WS) depuis les index metadata du document.
+        result = run_export(pdf_bytes, doc, export_cfg, transaction_fields=None)
 
     # 4) Statut : EXPORTED seulement après confirmation.
     with session_scope() as s:

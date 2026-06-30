@@ -71,3 +71,77 @@ def test_dashboard_requires_admin(app_ctx):
     login(client, email="val@arondor.com")  # validateur, pas admin
     r = client.get("/dashboard/", follow_redirects=True)
     assert "administrateurs" in r.get_data(as_text=True).lower()
+
+
+def test_dashboard_period_selector(app_ctx):
+    """Le sélecteur de période affiche les 3 fenêtres et accepte le paramètre."""
+    app, _ = app_ctx
+    client = app.test_client()
+    login(client)
+
+    # Les trois périodes sont proposées.
+    page = client.get("/dashboard/").get_data(as_text=True)
+    assert "7 derniers jours" in page
+    assert "30 derniers jours" in page
+    assert "12 derniers mois" in page
+
+    # Chaque période est acceptée et rend la page.
+    for period in ("week", "month", "year"):
+        r = client.get(f"/dashboard/?period={period}")
+        assert r.status_code == 200
+
+    # Une période invalide retombe sur le défaut sans erreur.
+    assert client.get("/dashboard/?period=bogus").status_code == 200
+
+
+def test_classification_breakdown(app_ctx):
+    """Le dashboard affiche la répartition des 3 nœuds de classification."""
+    from datetime import datetime
+
+    from alambic_core.models import Cost
+
+    app, Sess = app_ctx
+    now = datetime.now()
+    with Sess() as s:
+        # 2 gratuites (vectoriel + lexical), 1 payante (LLM)
+        s.add(Cost(amount=0, process="CLASSIFY", source="embedding_v3",
+                   document_id="d1", month=f"{now.month:02d}", year=str(now.year)))
+        s.add(Cost(amount=0, process="CLASSIFY", source="lexical_v2",
+                   document_id="d2", month=f"{now.month:02d}", year=str(now.year)))
+        s.add(Cost(amount=0.255, process="CLASSIFY", source="llm_vbootstrap",
+                   provider="mistral", document_id="d3",
+                   month=f"{now.month:02d}", year=str(now.year)))
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    html = client.get("/dashboard/").get_data(as_text=True)
+    # Le panneau de répartition est présent.
+    assert "Répartition de la classification" in html
+    # La part gratuite (2/3 ≈ 67 %) est mise en avant.
+    assert "67 %" in html or "gratuite" in html
+
+
+def test_projection_floor_and_warning(app_ctx):
+    """La projection expose un plancher 'à maturité' et avertit si bootstrap."""
+    from datetime import datetime
+
+    from alambic_core.models import Cost
+
+    app, Sess = app_ctx
+    now = datetime.now()
+    with Sess() as s:
+        # Coût dominé par le LLM → avertissement attendu.
+        s.add(Cost(amount=0.30, process="CLASSIFY", source="llm_vbootstrap",
+                   provider="mistral", document_id="d1",
+                   month=f"{now.month:02d}", year=str(now.year)))
+        s.add(Cost(amount=0.01, process="OCR", source="", provider="mistral",
+                   document_id="d1", month=f"{now.month:02d}", year=str(now.year)))
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    html = client.get("/dashboard/").get_data(as_text=True)
+    assert "À maturité" in html or "maturité" in html
+    # Avertissement bootstrap (part LLM élevée).
+    assert "Estimation haute" in html

@@ -83,3 +83,73 @@ def test_upload_without_config(app_ctx):
         follow_redirects=True,
     )
     assert "configuration" in r.get_data(as_text=True).lower()
+
+
+def test_exported_document_is_read_only(app_ctx):
+    """Un document EXPORTED ne peut être ni validé ni enregistré (409)."""
+    from alambic_core.models import Document, Transaction
+
+    app, Sess = app_ctx
+    with Sess() as s:
+        s.add(Transaction(id="tx-e", status="COMPLETED", process="X", account_id=""))
+        s.add(
+            Document(
+                id="doc-e",
+                transaction_id="tx-e",
+                status="EXPORTED",
+                process="X",
+                doctype="facture",
+            )
+        )
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    tok = csrf(client.get("/transactions/").get_data(as_text=True))
+    hdr = {"X-CSRFToken": tok}
+
+    # Validation refusée.
+    r = client.post(
+        "/transactions/documents/doc-e/validate",
+        json={"indexes": [{"name": "x", "value": "1"}]},
+        headers=hdr,
+    )
+    assert r.status_code == 409
+    assert r.get_json()["error"] == "document_exporte"
+
+    # Enregistrement refusé aussi.
+    r2 = client.post(
+        "/transactions/documents/doc-e/save",
+        json={"indexes": [{"name": "x", "value": "1"}]},
+        headers=hdr,
+    )
+    assert r2.status_code == 409
+
+
+def test_validated_document_still_editable(app_ctx):
+    """Un document VALIDATED (non exporté) reste validable."""
+    from alambic_core.models import Document, Transaction
+
+    app, Sess = app_ctx
+    with Sess() as s:
+        s.add(Transaction(id="tx-v", status="COMPLETED", process="X", account_id=""))
+        s.add(
+            Document(
+                id="doc-v",
+                transaction_id="tx-v",
+                status="VALIDATED",
+                process="X",
+                doctype="facture",
+            )
+        )
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    tok = csrf(client.get("/transactions/").get_data(as_text=True))
+    r = client.post(
+        "/transactions/documents/doc-v/validate",
+        json={"indexes": [{"name": "x", "value": "1"}]},
+        headers={"X-CSRFToken": tok},
+    )
+    assert r.status_code == 200

@@ -81,11 +81,8 @@ a:hover { color: var(--accent-700); }
 .sidebar-brand .brand-logo {
   display: block;
   width: 100%;
-  max-width: 150px;
+  max-width: 140px;
   height: auto;
-  background: #fff;
-  border-radius: var(--radius);
-  padding: 10px;
 }
 .sidebar-brand .brand-name {
   font-size: 18px;
@@ -362,8 +359,7 @@ tbody tr:hover { background: var(--slate-50); }
   color: var(--teal);
 }
 .login-brand .login-logo {
-  width: 140px; height: auto;
-  background: #fff; border-radius: var(--radius); padding: 12px;
+  width: 130px; height: auto;
 }
 .login-brand h2 { font-size: 22px; font-weight: 700; margin: 0 0 10px; letter-spacing: -0.01em; }
 .login-brand p { font-size: 14px; color: var(--slate-400); line-height: 1.6; }
@@ -396,7 +392,7 @@ tbody tr:hover { background: var(--slate-50); }
     background: var(--navy); padding: 12px 16px;
     border-bottom: 1px solid var(--navy-700);
   }
-  .topbar-logo { height: 32px; background: #fff; border-radius: 6px; padding: 4px 8px; }
+  .topbar-logo { height: 30px; width: auto; }
   .menu-toggle {
     display: flex; flex-direction: column; justify-content: center; gap: 5px;
     width: 44px; height: 44px; padding: 10px; background: transparent;
@@ -562,6 +558,27 @@ tr.config-inactive strong { font-weight: 500; }
 .edt-callout strong { display: block; margin-bottom: 6px; color: var(--slate-700); }
 .edt-callout ul { margin: 0; padding-left: 18px; }
 .edt-callout li { margin: 4px 0; line-height: 1.45; }
+.edt-help {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--slate-600);
+}
+.edt-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--primary-600, #4338ca);
+  padding: 4px 0;
+  user-select: none;
+}
+.edt-help summary:hover { color: var(--primary-500, #4f46e5); }
+.edt-steps { margin: 8px 0 0; padding-left: 20px; }
+.edt-steps li { margin: 6px 0; line-height: 1.5; }
+.edt-steps code, .edt-callout code, .form-hint code {
+  background: var(--slate-100);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
 .edt-status {
   margin-top: 10px;
   padding: 9px 12px;
@@ -580,3 +597,20 @@ tr.config-inactive strong { font-weight: 500; }
 .cpl-missing .cpl-detail { display: block; font-size: 10.5px; color: #92400e; opacity: 0.85; }
 .cpl-override { color: var(--slate-500, #64748b); font-style: italic; }
 .act-unlock { color: #b45309; }
+
+/* ── Champs propagés (table éditable) ─────────────────────────────────────── */
+.cf-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+.cf-table th { text-align: left; padding: 8px 6px; background: var(--slate-50); color: var(--slate-600); font-weight: 600; border-bottom: 2px solid var(--slate-200); }
+.cf-table td { padding: 5px 4px; vertical-align: middle; }
+.cf-table .form-control { font-size: 12.5px; padding: 5px 7px; }
+.cf-empty { color: var(--slate-400); font-size: 13px; padding: 12px; text-align: center; font-style: italic; }
+
+/* Icône d'aide contextuelle (infobulle au survol). */
+.field-hint-icon {
+  display: inline-block;
+  color: var(--slate-400);
+  cursor: help;
+  font-size: 12px;
+  margin-left: 3px;
+}
+.field-hint-icon:hover { color: var(--primary-500, #4f46e5); }

@@ -3,8 +3,13 @@
 
 {% macro render_attr(spec, idx, value) %}
   {% set key = spec[0] %}{% set label = spec[1] %}{% set widget = spec[3] %}{% set options = spec[4] %}
+  {% set hints = {
+    'strategy': "mrz : lit la bande MRZ d'une pièce d'identité (passeport, CNI) au lieu d'extraire le champ par position.",
+    'is_separator': "Marque la page contenant ce champ comme début d'un nouveau document (découpage).",
+    'anchors': "Mots-clés à proximité de la valeur. Pour MRZ : mrz:document_number, mrz:surname, etc.",
+  } %}
   <div class="field-attr">
-    <label>{{ label }}</label>
+    <label>{{ label }}{% if hints.get(key) %} <span class="field-hint-icon" title="{{ hints[key] }}">ⓘ</span>{% endif %}</label>
     {% if widget == 'checkbox' %}
       <input type="checkbox" name="fields-{{ idx }}-{{ key }}" {{ 'checked' if value }}>
     {% elif widget == 'select' %}
@@ -152,9 +157,25 @@
         }
       }
     };
+    const setCheck = (key, checked) => {
+      const el = card.querySelector('[name$="-' + key + '"][type="checkbox"]');
+      if (el) el.checked = !!checked;
+    };
     setVal('field_name', vals.field_name || '');
     setVal('field_type', vals.field_type || 'string');
     setVal('field_description', vals.field_description || '');
+    // Stratégie d'extraction proposée par l'IA.
+    setVal('anchors', vals.anchors || '');
+    setVal('direction', vals.direction || '');
+    setVal('regexp', vals.regexp || '');
+    setCheck('use_ia', vals.use_ia);
+    // Si une stratégie avancée a été proposée, déplier les options pour la montrer.
+    if (vals.anchors || vals.direction || vals.regexp || vals.use_ia) {
+      const adv = card.querySelector('.field-advanced');
+      const toggle = card.querySelector('.field-toggle-advanced');
+      if (adv) adv.style.display = 'block';
+      if (toggle) toggle.textContent = 'Masquer les options avancées';
+    }
   }
 
   function generateFromPdf(input) {

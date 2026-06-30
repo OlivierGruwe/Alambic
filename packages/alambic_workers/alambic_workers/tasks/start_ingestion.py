@@ -145,6 +145,10 @@ def start_ingestion(
             if existing is not None:
                 return None
 
+            # Champs propagés : capturés dans la session (config détachée ensuite).
+            _config_fields = list(getattr(config, "config_fields", None) or [])
+            _config_name = config.config_name or ""
+
         # ── Identifiants + destinations ──────────────────────────────────────
         oid = uuid4().hex[:16]
         transaction_id = f"trx-{oid}"
@@ -167,6 +171,20 @@ def start_ingestion(
             fut_work.result()
             fut_backup.result()
 
+        # ── Champs propagés : résolution + ajout aux index metadata ──────────
+        # Contexte = métadonnées source (email from/subject…) + tokens d'exécution.
+        propagated = []
+        if _config_fields:
+            from alambic_core.services.config_fields import resolve_config_fields
+
+            ctx = dict(metadata or {})
+            ctx.setdefault("transaction_id", transaction_id)
+            ctx.setdefault("config_name", _config_name)
+            propagated = [
+                {"name": r["name"], "value": r["value"]}
+                for r in resolve_config_fields(_config_fields, ctx)
+            ]
+
         # ── Payload du workflow (format attendu par run_ingestion) ───────────
         payload = {
             "cid": oid,
@@ -181,6 +199,10 @@ def start_ingestion(
                 {"name": "origin", "value": origin},
                 {"name": "original_filename", "value": original_filename},
                 {"name": "author", "value": author},
+                # Champs propagés résolus → index metadata du document initial.
+                # _write_metadata_indexes les pose, puis _copy_parent_indexes les
+                # recopie vers les sous-documents issus d'un découpage.
+                *propagated,
             ],
             "documents": [
                 {
@@ -190,6 +212,11 @@ def start_ingestion(
                 }
             ],
         }
+
+        # Politique de contenu mail (content_mode + filtre PJ) : transmise à
+        # l'extraction (EmlProcessor) quand le dépôt provient d'une boîte mail.
+        if metadata and metadata.get("mail_policy"):
+            payload["mail_policy"] = metadata["mail_policy"]
 
         # ── Démarrage du workflow Celery (remplace start_execution) ──────────
         run = app.signature("alambic_workers.ingestion.run", args=[payload])

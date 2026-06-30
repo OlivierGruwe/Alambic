@@ -66,6 +66,7 @@ app.conf.update(
         Queue("office", routing_key="office"),  # conversion LibreOffice
         Queue("cab", routing_key="cab"),  # lecture codes-barres (local, léger)
         Queue("ocr", routing_key="ocr"),  # OCR EdenAI (coûteux, lent)
+        Queue("multidoc", routing_key="multidoc"),  # détection multi-doc (vision Pixtral, coûteux)
         Queue("classif", routing_key="classif"),  # classification IA
         Queue("extract", routing_key="extract"),  # extraction de champs IA
     ),
@@ -82,6 +83,11 @@ app.conf.update(
         "alambic_workers.orchestration.retry.*": {"queue": "high"},
         # Conversion Office → queue dédiée (workers isolés LibreOffice).
         "alambic_workers.conversion.office": {"queue": "office"},
+        # Détection multi-document → queue dédiée (appel vision Pixtral coûteux,
+        # isolé pour ne pas bloquer les étapes légères de la queue normal).
+        "alambic_workers.processing.multi_doc": {"queue": "multidoc"},
+        # Relève des boîtes mail (IMAP) : I/O réseau, sur la queue normal.
+        "alambic_workers.mail.poll": {"queue": "normal"},
     },
     # Planification Beat : purge quotidienne des transactions dont la rétention
     # (par config, repli global) est écoulée. 3h du matin = heure creuse.
@@ -96,6 +102,12 @@ app.conf.update(
         "balayage-exports-en-attente": {
             "task": "alambic_workers.export.sweep",
             "schedule": crontab(minute="*/15"),
+        },
+        # Relève des boîtes mail (IMAP) : récupère les nouveaux mails et les
+        # injecte dans le pipeline. Toutes les 5 min (compromis réactivité/charge).
+        "releve-mail-imap": {
+            "task": "alambic_workers.mail.poll",
+            "schedule": crontab(minute="*/5"),
         },
         # Voiture-balai : supprime les dossiers Garage orphelins (transactions
         # disparues de la base). Ménage de fond, hebdomadaire, nuit du dimanche.

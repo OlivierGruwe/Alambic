@@ -140,7 +140,18 @@ def extract_files(payload: dict) -> dict:
         storage.download_to(src_bucket, src_key, local_src)
 
         # 2. Extraire via le moteur (zip/eml/défaut), récursif et borné.
-        engine = build_engine()
+        # Si le dépôt provient d'une boîte mail, le payload porte une politique
+        # de contenu (content_mode + filtre PJ) appliquée par l'EmlProcessor.
+        mail_policy = None
+        mp = payload.get("mail_policy")
+        if mp:
+            from alambic_core.pipeline.extraction import MailContentPolicy
+
+            mail_policy = MailContentPolicy(
+                content_mode=mp.get("content_mode", "all"),
+                filter_attachment_extensions=mp.get("filter_attachment_extensions", ""),
+            )
+        engine = build_engine(mail_policy=mail_policy)
         result = engine.process(local_src, out_dir)
 
         # 3. Décider du périmètre : un seul fichier ok ET pas d'écarté → mono-doc

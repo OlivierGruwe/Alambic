@@ -72,6 +72,18 @@ services:
       replicas: ${OCR_REPLICAS:-2}
       <<: *restart
 
+  multidoc-worker:
+    image: ${REGISTRY:-alambic}/alambic-app:base
+    command: >-
+      celery -A alambic_workers.celery_app:app worker -Q multidoc -n multidoc@%h
+      --loglevel=INFO --concurrency=1 --max-tasks-per-child=10
+      --max-memory-per-child=${MULTIDOC_MAX_MEM_KB:-1500000}
+    environment: *app-env
+    networks: [alambic_net]
+    deploy:
+      replicas: ${MULTIDOC_REPLICAS:-1}
+      <<: *restart
+
   classif-worker:
     image: ${REGISTRY:-alambic}/alambic-app:base
     command: celery -A alambic_workers.celery_app:app worker -Q classif -n classif@%h --loglevel=INFO

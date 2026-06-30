@@ -82,6 +82,21 @@ services:
     deploy:
       replicas: ${OCR_REPLICAS:-2}
 
+  # ── Worker MULTIDOC : détection multi-document (vision Pixtral) ─────────────
+  # Appel vision coûteux/lent, isolé pour ne pas bloquer la queue normal.
+  multidoc-worker:
+    <<: [*app-image, *app-common]
+    # --max-tasks-per-child=10 : recycle le process worker régulièrement pour
+    # libérer la mémoire des rendus d'images (PyMuPDF/Pillow), qui peut se
+    # fragmenter et provoquer un arrêt « warm stop » par dépassement mémoire.
+    # --max-memory-per-child (Ko) : recyclage si le process dépasse ce seuil.
+    command: >-
+      celery -A alambic_workers.celery_app:app worker -Q multidoc -n multidoc@%h
+      --loglevel=INFO --concurrency=1 --max-tasks-per-child=10
+      --max-memory-per-child=${MULTIDOC_MAX_MEM_KB:-1500000}
+    deploy:
+      replicas: ${MULTIDOC_REPLICAS:-1}
+
   # ── Worker CLASSIF : classification IA ─────────────────────────────────────
   classif-worker:
     <<: [*app-image, *app-common]

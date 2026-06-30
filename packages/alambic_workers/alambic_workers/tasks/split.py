@@ -48,9 +48,7 @@ def _doctype_fields(config_id: str | None) -> list[dict]:
         config = s.get(Config, config_id)
         if config is None:
             return []
-        doctype_ids = doctype_ids_from_expected(config) or (
-            [config.doctype_id] if config.doctype_id else []
-        )
+        doctype_ids = doctype_ids_from_expected(config)
         # Découpage par séparateur réservé au cas mono-doctype.
         if len(doctype_ids) != 1:
             return []
