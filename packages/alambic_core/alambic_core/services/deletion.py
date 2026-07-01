@@ -76,7 +76,9 @@ def delete_transaction(transaction_id: str, *, work_bucket: str | None = None) -
         prefix,
     )
 
-    # ── 2. Base ensuite (cascade efface documents, steps, messages, costs…) ──
+    # ── 2. Base ensuite : cascade efface documents, steps, messages. Les COÛTS
+    # sont PRÉSERVÉS (FK en SET NULL) : leur transaction_id/document_id passe à
+    # NULL mais le coût subsiste (account_id, montant, date) pour les stats. ──
     with session_scope() as s:
         tx = s.get(Transaction, transaction_id)
         if tx is not None:

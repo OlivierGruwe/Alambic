@@ -40,6 +40,8 @@ app = Celery(
         "alambic_workers.tasks.ingestion",
         "alambic_workers.tasks.conversion",
         "alambic_workers.tasks.retention",
+        "alambic_workers.tasks.mail_poll",
+        "alambic_workers.tasks.inbox_poll",
     ],
 )
 
@@ -88,6 +90,8 @@ app.conf.update(
         "alambic_workers.processing.multi_doc": {"queue": "multidoc"},
         # Relève des boîtes mail (IMAP) : I/O réseau, sur la queue normal.
         "alambic_workers.mail.poll": {"queue": "normal"},
+        # Import des entrées FTP/S3 : I/O réseau, sur la queue normal.
+        "alambic_workers.inbox.poll": {"queue": "normal"},
     },
     # Planification Beat : purge quotidienne des transactions dont la rétention
     # (par config, repli global) est écoulée. 3h du matin = heure creuse.
@@ -107,6 +111,14 @@ app.conf.update(
         # injecte dans le pipeline. Toutes les 5 min (compromis réactivité/charge).
         "releve-mail-imap": {
             "task": "alambic_workers.mail.poll",
+            "schedule": crontab(minute="*/5"),
+        },
+        # Import des entrées FTP/S3 : liste les sources d'entrée des configs
+        # actives, importe les nouveaux fichiers (dédoublonnage temporel par
+        # fenêtre glissante) et les déplace vers treated/YYYYMMDD/. Toutes les
+        # 5 min, aligné sur le mail.
+        "import-entrees-ftp-s3": {
+            "task": "alambic_workers.inbox.poll",
             "schedule": crontab(minute="*/5"),
         },
         # Voiture-balai : supprime les dossiers Garage orphelins (transactions

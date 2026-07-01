@@ -79,6 +79,71 @@ def load_indexes(session, document_id: str) -> list[dict]:
     ]
 
 
+def load_all_doctype_fields(session, document_id: str) -> list[dict]:
+    """Liste TOUS les champs définis dans le doctype du document, pré-remplis des
+    valeurs extraites (les champs sans valeur restent vides pour saisie manuelle).
+
+    C'est ce que l'écran de validation doit afficher : l'opérateur voit tous les
+    champs attendus, pas seulement ceux que l'extraction a trouvés. Un document
+    « aucun champ extrait » présente ainsi le formulaire complet, vide, à saisir.
+
+    L'ordre suit la définition du doctype (pas l'ordre alphabétique), ce qui est
+    plus naturel pour l'opérateur.
+    """
+    from alambic_core.models import Doctype, Document
+    from alambic_core.services.barcode_gating import _parse_fields
+
+    doc = session.get(Document, document_id)
+    if doc is None:
+        return []
+
+    # Valeurs déjà extraites, indexées par nom de champ.
+    extracted = {r["index_name"]: r for r in load_indexes(session, document_id)}
+
+    # Champs définis dans le doctype (résolu par nom, comme l'extraction).
+    doctype = (
+        session.query(Doctype).filter(Doctype.doctype_name == (doc.doctype or "")).first()
+        if doc.doctype
+        else None
+    )
+    defined = _parse_fields(doctype.json_content) if doctype is not None else []
+
+    result = []
+    seen = set()
+    for field in defined:
+        if not isinstance(field, dict):
+            continue
+        name = field.get("field_name") or field.get("name") or ""
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        ex = extracted.get(name)
+        result.append(
+            {
+                "index_name": name,
+                "index_value": ex["index_value"] if ex else "",
+                "index_score": ex["index_score"] if ex else None,
+                "index_desc": field.get("field_description") or field.get("description") or "",
+                "extracted": ex is not None,
+            }
+        )
+
+    # Champs extraits qui ne seraient pas dans la définition du doctype (rare :
+    # extraction libre) : on les ajoute à la fin pour ne rien perdre.
+    for name, ex in extracted.items():
+        if name not in seen:
+            result.append(
+                {
+                    "index_name": name,
+                    "index_value": ex["index_value"],
+                    "index_score": ex["index_score"],
+                    "index_desc": ex.get("index_desc") or "",
+                    "extracted": True,
+                }
+            )
+    return result
+
+
 def save_indexes(session, document_id: str, indexes: list[dict]) -> int:
     """Enregistre les corrections d'index d'un opérateur.
 

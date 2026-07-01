@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import UTC
 
 from alambic_core.db.session import get_sessionmaker
+from alambic_core.domain.origins import origin_label
 from alambic_core.models import Config
 from alambic_core.storage import build_upload_key, input_bucket, put_bytes
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
@@ -42,6 +43,7 @@ _SORTABLE_COLUMNS = {
     "config__id": "config_id",
     "status": "status",
     "process": "process",
+    "origin": "origin",
     "author": "author",
 }
 
@@ -155,6 +157,7 @@ def index():
                     "created_at": tx.created_at,
                     "account": account_names.get(tx.account_id, "—"),
                     "config": config_names.get(tx.config_id, "—"),
+                    "origin": origin_label(tx.origin),
                     "status": status,
                     "process": tx.process,
                     "nb_docs": count_active_documents(doc_statuses),
@@ -486,7 +489,7 @@ def document_pdf(doc_id: str):
 def document_indexes(doc_id: str):
     """Renvoie les index extraits d'un document (JSON) pour l'écran de validation."""
     from alambic_core.models import Document
-    from alambic_core.services.validation import load_indexes
+    from alambic_core.services.validation import load_all_doctype_fields
 
     with _session() as s:
         doc = s.get(Document, doc_id)
@@ -496,7 +499,9 @@ def document_indexes(doc_id: str):
             tx = doc.transaction
             if tx is not None and tx.account_id != current_user.account_id:
                 abort(403)
-        indexes = load_indexes(s, doc_id)
+        # Tous les champs DÉFINIS dans le doctype, pré-remplis des valeurs
+        # extraites (les champs vides restent affichés pour saisie manuelle).
+        indexes = load_all_doctype_fields(s, doc_id)
         payload = {
             "document_id": doc_id,
             "doctype": doc.doctype,
@@ -506,6 +511,115 @@ def document_indexes(doc_id: str):
             "indexes": indexes,
         }
     return jsonify(payload)
+
+
+@transactions_bp.route("/documents/<doc_id>/reclassify", methods=["POST"])
+@admin_required
+def document_reclassify(doc_id: str):
+    """Attribue/corrige le doctype d'un document et relance l'extraction.
+
+    Corps JSON : { "doctype": "<nom>" }. Utilisé pour classer un document
+    « unknown » (non reconnu) ou corriger une classification erronée. Après
+    mise à jour, l'extraction est relancée automatiquement avec le nouveau type.
+    """
+    from alambic_core.domain.enums import DocumentStatus
+    from alambic_core.models import Document
+    from alambic_core.services.reclassification import (
+        allowed_doctypes_for_document,
+        build_extract_payload,
+        prepare_reclassify_guess,
+        reclassify_document,
+    )
+
+    data = request.get_json(silent=True) or {}
+    doctype = (data.get("doctype") or "").strip()
+    if not doctype:
+        return jsonify({"error": "missing_doctype"}), 400
+
+    # Cas spécial « laisser deviner » : on relance la classification automatique
+    # (le pipeline re-décide le type) au lieu d'imposer un doctype.
+    guess = doctype == "__guess__"
+
+    with _session() as s:
+        doc = s.get(Document, doc_id)
+        if doc is None:
+            abort(404)
+        if not current_user.is_super_admin:
+            tx = doc.transaction
+            if tx is not None and tx.account_id != current_user.account_id:
+                abort(403)
+        # Document exporté = lecture seule.
+        if doc.status == DocumentStatus.EXPORTED.value:
+            return jsonify({"error": "document_exporte", "message": "Document déjà exporté."}), 409
+
+        if not guess:
+            # Vérifie que le doctype demandé est bien proposable pour ce document.
+            allowed_names = {d.doctype_name for d in allowed_doctypes_for_document(s, doc)}
+            if doctype not in allowed_names:
+                return jsonify(
+                    {"error": "doctype_not_allowed", "allowed": sorted(allowed_names)}
+                ), 400
+            ok = reclassify_document(s, doc_id, doctype)
+            if not ok:
+                abort(404)
+        else:
+            # « Laisser deviner » : prépare une re-classification automatique.
+            if not prepare_reclassify_guess(s, doc_id):
+                abort(404)
+        payload = build_extract_payload(s, doc_id)
+        s.commit()
+
+    # Relance : soit la classification (guess), soit directement l'extraction.
+    queued = False
+    try:
+        if guess:
+            from alambic_workers.orchestration.processing import classify
+
+            classify.apply_async(args=[payload], queue="classif")
+        else:
+            from alambic_workers.orchestration.processing import extract_fields
+
+            extract_fields.apply_async(args=[payload], queue="extract")
+        queued = True
+    except Exception as exc:  # noqa: BLE001
+        from flask import current_app
+
+        current_app.logger.warning("Relance non déclenchée pour %s : %s", doc_id, exc)
+
+    return jsonify(
+        {
+            "document_id": doc_id,
+            "doctype": "(deviné)" if guess else doctype,
+            "extract_queued": queued,
+        }
+    )
+
+
+@transactions_bp.route("/documents/<doc_id>/doctypes", methods=["GET"])
+@admin_required
+def document_doctypes(doc_id: str):
+    """Liste les doctypes proposables pour reclasser ce document (+ let_it_guess)."""
+    from alambic_core.models import Config, Document
+    from alambic_core.services.reclassification import allowed_doctypes_for_document
+
+    with _session() as s:
+        doc = s.get(Document, doc_id)
+        if doc is None:
+            abort(404)
+        if not current_user.is_super_admin:
+            tx = doc.transaction
+            if tx is not None and tx.account_id != current_user.account_id:
+                abort(403)
+        doctypes = [d.doctype_name for d in allowed_doctypes_for_document(s, doc)]
+        # « Laisser deviner » proposé seulement si la config l'autorise.
+        tx = doc.transaction
+        config = s.get(Config, tx.config_id) if tx and tx.config_id else None
+        general = (config.general or {}) if config else {}
+        let_it_guess = bool(general.get("classifier_let_it_guess"))
+
+    return jsonify(
+        {"doctypes": doctypes, "current": doc.doctype or "", "let_it_guess": let_it_guess}
+    )
 
 
 @transactions_bp.route("/documents/<doc_id>/validate", methods=["POST"])

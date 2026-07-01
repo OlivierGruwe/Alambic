@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Clés API{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Clés API</h1>
+    <div class="subtitle">{{ keys|length }} clé{{ 's' if keys|length != 1 }} — authentification des web services</div>
+  </div>
+  <button type="button" class="btn btn-primary" onclick="document.getElementById('newKeyForm').style.display='block';this.style.display='none';">Nouvelle clé</button>
+</div>
+
+{# Affichage UNIQUE de la valeur en clair juste après création. #}
+{% with messages = get_flashed_messages(category_filter=["apikey_secret"]) %}
+  {% if messages %}
+    {% for msg in messages %}
+    <div class="card" style="border-left:4px solid #d97706;background:#fffbeb;padding:16px;">
+      <strong>⚠ Clé créée — copiez-la maintenant</strong>
+      <p style="margin:8px 0 0;">Elle ne sera plus jamais affichée. Notez-la dans un endroit sûr.</p>
+      <code style="display:block;margin-top:8px;padding:8px;background:#1f2937;color:#f9fafb;border-radius:4px;word-break:break-all;font-size:0.95rem;">{{ msg.split(": ")[-1] }}</code>
+    </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="card" id="newKeyForm" style="display:none;margin-bottom:16px;padding:16px;">
+  <h3>Nouvelle clé API</h3>
+  <form method="POST" action="{{ url_for('apikeys.create') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+      <label for="apikey_name">Nom</label>
+      <input type="text" id="apikey_name" name="apikey_name" class="form-control" required
+             placeholder="Ex. WS Ingestion facturation">
+    </div>
+    {% if current_user.is_super_admin %}
+    <div class="form-group">
+      <label class="checkbox-inline">
+        <input type="checkbox" id="is_admin" name="is_admin"> Clé administrateur (tous les comptes)
+      </label>
+    </div>
+    {% endif %}
+    <div class="form-group">
+      <label for="validity">Validité (jours, 0 = sans limite)</label>
+      <input type="number" id="validity" name="validity" class="form-control" value="30" min="0">
+    </div>
+    <button type="submit" class="btn btn-primary">Créer la clé</button>
+  </form>
+</div>
+
+{% if keys %}
+<div class="card">
+  <table class="responsive-table">
+    <thead>
+      <tr><th>Nom</th><th>Préfixe</th><th>Compte</th><th>Admin</th><th>Validité</th><th>État</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for k in keys %}
+      <tr>
+        <td data-label="Nom"><strong>{{ k.name }}</strong></td>
+        <td data-label="Préfixe"><code>{{ k.prefix }}…</code></td>
+        <td data-label="Compte">{{ k.account }}</td>
+        <td data-label="Admin">
+          {% if k.is_admin %}<span class="badge badge-active">Oui</span>
+          {% else %}<span class="badge badge-inactive">Non</span>{% endif %}
+        </td>
+        <td data-label="Validité">
+          {% if k.expires_at %}{{ k.expires_at.strftime('%d/%m/%Y') }}
+          {% else %}Sans limite{% endif %}
+        </td>
+        <td data-label="État">
+          {% if k.is_active %}<span class="badge badge-active">Active</span>
+          {% else %}<span class="badge badge-inactive">Révoquée</span>{% endif %}
+        </td>
+        <td data-label="Actions">
+          <div class="row-actions">
+            <form method="POST" action="{{ url_for('apikeys.toggle', key_id=k.id) }}" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-secondary btn-sm">{{ 'Désactiver' if k.is_active else 'Activer' }}</button>
+            </form>
+            <form method="POST" action="{{ url_for('apikeys.delete', key_id=k.id) }}" style="display:inline;"
+                  onsubmit="return confirm('Supprimer définitivement la clé {{ k.name }} ?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-ghost btn-sm">Supprimer</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card"><div class="empty">
+  <h3>Aucune clé API</h3>
+  <p>Créez une clé pour permettre à un web service d'ingérer des documents via l'API.</p>
+</div></div>
+{% endif %}
+{% endblock %}

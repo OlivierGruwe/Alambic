@@ -51,6 +51,42 @@ def test_create_account(app_ctx):
         assert accs[0].town == "Bordeaux"
 
 
+def test_create_account_with_contact(app_ctx):
+    """Les champs de contact (responsable, rôle, email, tél) sont enregistrés."""
+    app, Sess = app_ctx
+    client = app.test_client()
+    login(client)
+    tok = csrf(client.get("/accounts/new").get_data(as_text=True))
+    client.post(
+        "/accounts/new",
+        data={
+            "account_name": "Arondor",
+            "active": "y",
+            "contact_name": "Olivier Gruwe",
+            "contact_role": "Responsable projet",
+            "contact_email": "olivier.gruwe@arondor.com",
+            "contact_phone": "0102030405",
+            "csrf_token": tok,
+        },
+        follow_redirects=True,
+    )
+    with Sess() as s:
+        acc = s.query(Account).filter_by(account_name="arondor").first()
+        assert acc is not None
+        assert acc.contact_name == "Olivier Gruwe"
+        assert acc.contact_role == "Responsable projet"
+        assert acc.contact_email == "olivier.gruwe@arondor.com"
+        assert acc.contact_phone == "0102030405"
+        acc_id = acc.id
+
+    # Le formulaire d'édition pré-remplit les champs contact.
+    page = client.get(f"/accounts/{acc_id}/edit").get_data(as_text=True)
+    assert "Olivier Gruwe" in page
+    assert "olivier.gruwe@arondor.com" in page
+    # Le bloc Contact précède le bloc Adresse.
+    assert page.index("Contact") < page.index("Adresse")
+
+
 def test_edit_account_keeps_active(app_ctx):
     app, Sess = app_ctx
     client = app.test_client()

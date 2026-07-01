@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Caddyfile — reverse proxy TLS devant Alambic (appli d'administration + WS API).
+#
+# Point d'entrée HTTPS unique. Caddy termine le TLS et proxifie tout le trafic
+# vers le conteneur « ui » (gunicorn:5000) sur le réseau interne Docker. L'appli
+# d'admin et les endpoints WS (/api/v1/...) sont le MÊME processus Flask, donc
+# un seul bloc de site les couvre tous les deux.
+#
+# CERTIFICAT :
+#   - Par défaut ALAMBIC_DOMAIN=localhost → « tls internal » : Caddy génère un
+#     certificat AUTO-SIGNÉ via sa propre autorité interne. 100% souverain,
+#     aucune dépendance externe (idéal self-hosted, y compris air-gapped). Les
+#     clients devront faire confiance à l'AC interne de Caddy (ou l'ignorer en
+#     test avec -k pour curl).
+#   - Pour un domaine public : mettre ALAMBIC_DOMAIN=alambic.mondomaine.fr et
+#     ALAMBIC_TLS_EMAIL=... dans .env, puis remplacer « tls internal » par la
+#     directive « tls {$ALAMBIC_TLS_EMAIL} » (Caddy obtient alors un certificat
+#     Let's Encrypt automatiquement).
+# ═══════════════════════════════════════════════════════════════════════════
+
+{$ALAMBIC_DOMAIN} {
+	# Certificat interne auto-signé (souverain). Pour Let's Encrypt sur domaine
+	# public, remplacer par : tls {$ALAMBIC_TLS_EMAIL}
+	tls internal
+
+	# En-têtes de sécurité de base.
+	header {
+		# HSTS : force HTTPS côté navigateur (1 an). À activer une fois le TLS
+		# stable et le domaine définitif (sinon on peut se verrouiller en test).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		# Ne pas divulguer la stack.
+		-Server
+	}
+
+	# Corps de requête : les WS déposent des documents (PDF, images). On autorise
+	# des uploads raisonnables ; ajuster selon la taille max des documents ingérés.
+	request_body {
+		max_size 100MB
+	}
+
+	# Tout le trafic (UI + /api/v1) va au même backend Flask/gunicorn.
+	reverse_proxy ui:5000 {
+		# Transmet les en-têtes d'origine au backend (IP réelle, schéma https)
+		# pour que Flask sache qu'il est derrière un proxy TLS.
+		header_up X-Forwarded-Proto https
+		header_up X-Real-IP {remote_host}
+	}
+}

@@ -15,7 +15,8 @@ def test_admin_sees_all_sections(app_ctx):
     assert "Comptes" in page
     assert "Traitement" in page
     assert "Transactions" in page
-    assert "bientôt" in page  # Conf. Email / API Keys à venir
+    # Les clés API sont désormais un vrai lien (plus un placeholder « bientôt »).
+    assert "Clés API" in page
 
 
 def test_validator_no_admin_section(app_ctx):

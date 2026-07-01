@@ -131,3 +131,31 @@ def test_delete_bulk_removes_selected(app_ctx, monkeypatch):
     )
     assert r.status_code == 200
     assert called == ["tx1"]
+
+
+def test_indexes_route_returns_all_doctype_fields(app_ctx):
+    """La route indexes renvoie tous les champs du doctype, même sans extraction."""
+    import json
+
+    from alambic_core.models import Doctype, Document, Transaction
+    from conftest import login
+
+    app, Sess = app_ctx
+    fields = {"fields": [
+        {"field_name": "type_carte", "field_description": "Type"},
+        {"field_name": "num_carte", "field_description": "Numéro"},
+    ]}
+    with Sess() as s:
+        s.add(Doctype(id="dt1", doctype_name="carte", json_content=json.dumps(fields)))
+        s.add(Transaction(id="tx1", status="W", process="X", account_id="acc1"))
+        s.add(Document(id="doc1", transaction_id="tx1", doctype="carte",
+                       status="PENDING_VALIDATION"))
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    data = client.get("/transactions/documents/doc1/indexes").get_json()
+    names = {f["index_name"] for f in data["indexes"]}
+    assert names == {"type_carte", "num_carte"}
+    # Aucun extrait → tous vides mais présents.
+    assert all(f["index_value"] == "" for f in data["indexes"])

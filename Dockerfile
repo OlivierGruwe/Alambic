@@ -32,10 +32,23 @@ ENV UV_LINK_MODE=copy \
 
 WORKDIR /app
 
-# Dépendances système minimales (psycopg a besoin de libpq au runtime).
+# Dépendances système :
+#   - libpq5                : requis par psycopg au runtime (Postgres).
+#   - tesseract-ocr + langues: OCR local souverain (moteur alternatif à EdenAI).
+#     On installe le français (fra) et l'anglais (eng) ; ajouter d'autres paquets
+#     tesseract-ocr-<lang> ici au besoin (ex. tesseract-ocr-deu pour l'allemand).
+#     tesseract-ocr-osd : détection d'orientation (rotation auto 90/180/270).
+#   - libgl1 / libglib2.0-0 : requis par opencv-python-headless (segmentation
+#     multi-document) même en headless (chargement des libs natives OpenCV).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libpq5 \
+    && apt-get install -y --no-install-recommends \
+        libpq5 \
+        tesseract-ocr tesseract-ocr-fra tesseract-ocr-eng tesseract-ocr-osd \
+        libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
+
+# Chemin du binaire Tesseract pour pytesseract (au cas où il n'est pas dans PATH).
+ENV TESSERACT_CMD=/usr/bin/tesseract
 
 # On copie d'abord les manifestes pour profiter du cache de couches : tant que
 # les pyproject ne changent pas, la résolution des deps n'est pas refaite.

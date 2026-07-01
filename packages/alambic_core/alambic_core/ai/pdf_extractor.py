@@ -117,12 +117,18 @@ class PdfExtractor:
     `barcodes` : liste {value, page, position} de readCAB, injectée par page.
     """
 
-    def __init__(self, pdf_path, ocr, *, treat_images=False, barcodes=None, max_pages=30):
+    def __init__(self, pdf_path, ocr, *, treat_images=False, barcodes=None, max_pages=30,
+                 max_image_pixels=None):
         self.pdf_path = pdf_path
         self.ocr = ocr
         self.treat_images = treat_images
         self.barcodes = barcodes or []
         self.max_pages = max_pages
+        # Garde-fou taille image (None → défaut du module). Configurable pour
+        # ajuster le compromis qualité OCR / vitesse selon le parc documentaire.
+        from alambic_core.ai.image_preprocess import MAX_IMAGE_PIXELS
+
+        self.max_image_pixels = max_image_pixels or MAX_IMAGE_PIXELS
 
         self.pages: list[dict] = []
         self.page_count = 0
@@ -174,6 +180,12 @@ class PdfExtractor:
                 self.model = ocr_res.model
 
     def _ocr_bytes(self, data: bytes, filename: str):
+        # Garde-fou taille : borne les octets image avant TOUT moteur (Tesseract
+        # local comme EdenAI distant). Pour EdenAI, réduit aussi le volume réseau
+        # et le coût. Sans effet sous le seuil.
+        from alambic_core.ai.image_preprocess import guard_image_bytes
+
+        data = guard_image_bytes(data, max_pixels=self.max_image_pixels, filename=filename)
         with self._sema:
             return self.ocr.ocr_bytes(data, filename)
 

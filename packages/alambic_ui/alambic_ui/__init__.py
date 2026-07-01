@@ -65,6 +65,13 @@ def create_app(config_object: type[Config] = Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_object)
 
+    # Derrière le reverse proxy TLS (Caddy) : faire confiance aux en-têtes
+    # X-Forwarded-* pour que Flask sache qu'il est servi en HTTPS (url_for
+    # externe correct, cookies Secure). x_for/x_proto=1 = un seul proxy devant.
+    from werkzeug.middleware.proxy_fix import ProxyFix
+
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
     # Socle souverain : connexion DB + chiffrement.
     init_core()
     session_factory = get_sessionmaker()
@@ -82,7 +89,10 @@ def create_app(config_object: type[Config] = Config) -> Flask:
 
     # Blueprints
     from .blueprints.accounts import accounts_bp
+    from .blueprints.api import api_bp
+    from .blueprints.apikeys import apikeys_bp
     from .blueprints.auth import auth_bp
+    from .blueprints.bench import bench_bp
     from .blueprints.configs import configs_bp
     from .blueprints.dashboard import dashboard_bp
     from .blueprints.doctypes import doctypes_bp
@@ -100,6 +110,11 @@ def create_app(config_object: type[Config] = Config) -> Flask:
     app.register_blueprint(mail_configs_bp)
     app.register_blueprint(transactions_bp)
     app.register_blueprint(invite_bp)
+    app.register_blueprint(apikeys_bp)
+    app.register_blueprint(bench_bp)
+    app.register_blueprint(api_bp)
+    # Les endpoints WS s'authentifient par clé API (pas de session/CSRF).
+    csrf.exempt(api_bp)
 
     @app.route("/")
     def index():

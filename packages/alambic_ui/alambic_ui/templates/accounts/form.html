@@ -1,6 +1,21 @@
 {% extends "base.html" %}
 {% block title %}{{ 'Nouveau compte' if mode == 'create' else 'Éditer le compte' }}{% endblock %}
 
+{% block head %}
+<style>
+  .credits-panel { display: flex; flex-wrap: wrap; gap: 24px; align-items: center; padding: 14px 16px; border: 1px solid var(--slate-100, #e2e8f0); border-radius: 10px; background: var(--slate-50, #f8fafc); }
+  .credits-figure { display: flex; flex-direction: column; }
+  .credits-amount { font-size: 28px; font-weight: 700; color: var(--slate-800, #1e293b); }
+  .credits-label { font-size: 12px; color: var(--slate-500, #64748b); }
+  .credits-detail { display: grid; gap: 4px; font-size: 13px; flex: 1; min-width: 240px; }
+  .credits-detail > div { display: flex; justify-content: space-between; gap: 16px; }
+  .credits-k { color: var(--slate-500, #64748b); }
+  .credits-v { color: var(--slate-700, #334155); font-variant-numeric: tabular-nums; }
+  .credits-strong { font-weight: 600; }
+  .credits-note { color: var(--slate-400, #94a3b8); font-style: italic; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
   <div>
@@ -20,16 +35,38 @@
 
     <div class="tab-body">
       <div class="tab-panel active" data-panel="general">
-        <div class="form-group">
-          {{ form.account_name.label }}
-          {{ form.account_name(class="form-control") }}
-          {% if form.account_name.errors %}
-            <div class="form-errors">{{ form.account_name.errors[0] }}</div>
-          {% endif %}
+        {# Identité #}
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            {{ form.account_name.label }}
+            {{ form.account_name(class="form-control") }}
+            {% if form.account_name.errors %}
+              <div class="form-errors">{{ form.account_name.errors[0] }}</div>
+            {% endif %}
+          </div>
+          <div class="form-group" style="display:flex;align-items:flex-end;">
+            <div class="form-check">{{ form.active() }} {{ form.active.label }}</div>
+          </div>
         </div>
-        <div class="form-group">
-          <div class="form-check">{{ form.active() }} {{ form.active.label }}</div>
+
+        {# Contact (responsable du compte) #}
+        <div class="form-section-title">Contact</div>
+        <div class="form-row">
+          <div class="form-group">{{ form.contact_name.label }} {{ form.contact_name(class="form-control") }}</div>
+          <div class="form-group">{{ form.contact_role.label }} {{ form.contact_role(class="form-control") }}</div>
         </div>
+        <div class="form-row">
+          <div class="form-group">
+            {{ form.contact_email.label }} {{ form.contact_email(class="form-control") }}
+            {% if form.contact_email.errors %}
+              <div class="form-errors">{{ form.contact_email.errors[0] }}</div>
+            {% endif %}
+          </div>
+          <div class="form-group">{{ form.contact_phone.label }} {{ form.contact_phone(class="form-control") }}</div>
+        </div>
+
+        {# Adresse (regroupée en bas) #}
+        <div class="form-section-title">Adresse</div>
         <div class="form-group">{{ form.address1.label }} {{ form.address1(class="form-control") }}</div>
         <div class="form-group">{{ form.address2.label }} {{ form.address2(class="form-control") }}</div>
         <div class="form-group">{{ form.address3.label }} {{ form.address3(class="form-control") }}</div>
@@ -52,6 +89,36 @@
             {% endif %}
           </div>
         </div>
+
+        {# Crédits EdenAI restants + projection d'autonomie #}
+        {% if credits %}
+        <div class="form-section-title">Crédits EdenAI</div>
+        {% if credits.available %}
+        <div class="credits-panel">
+          <div class="credits-figure">
+            <span class="credits-amount">${{ "%.2f"|format(credits.credits) }}</span>
+            <span class="credits-label">crédits restants{% if credits.from_cache %} (cache){% endif %}</span>
+          </div>
+          <div class="credits-detail">
+            <div><span class="credits-k">Dépense 7 derniers jours</span><span class="credits-v">{{ "%.4f"|format(credits.spend_last_7d) }} €</span></div>
+            <div><span class="credits-k">Moyenne journalière</span><span class="credits-v">{{ "%.4f"|format(credits.daily_spend) }} €/j</span></div>
+            {% if credits.days_remaining is not none %}
+            <div><span class="credits-k">Autonomie estimée</span><span class="credits-v credits-strong">{{ "%.0f"|format(credits.days_remaining) }} jour(s)</span></div>
+            <div><span class="credits-k">Rupture estimée</span><span class="credits-v credits-strong">{{ credits.depletion_date.strftime("%d/%m/%Y") }}</span></div>
+            {% else %}
+            <div class="credits-note">Autonomie indéterminée (pas de dépense récente).</div>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="form-hint">
+          Solde EdenAI indisponible
+          {% if credits.reason == "unauthorized" %}(clé invalide ou expirée).
+          {% elif credits.reason == "no_key" %}(aucune clé définie).
+          {% else %}(service momentanément injoignable).{% endif %}
+        </div>
+        {% endif %}
+        {% endif %}
       </div>
 
       <div class="tab-panel" data-panel="securite">

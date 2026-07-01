@@ -17,6 +17,14 @@
               {{ "Consulter" if d.status == "EXPORTED" else ("Revoir" if d.status == "VALIDATED" else "Valider") }}
             </button>
           {% endif %}
+          {# Classer/Reclasser : disponible tant que le document n'est pas exporté.
+             Couvre le cas « unknown »/non reconnu (classement initial) et la
+             correction d'une classification erronée (l'extraction repart). #}
+          {% if d.status != "EXPORTED" %}
+            <button type="button" class="doc-reclassify-btn" onclick="openReclassify('{{ d.id }}')">
+              {{ "Classer" if d.status in ("CONVERTED_TO_PDF", "UNRECOGNIZED", "OCR_DONE") else "Reclasser" }}
+            </button>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

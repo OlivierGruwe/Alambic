@@ -47,6 +47,20 @@ def main() -> int:
 
         settings = config.edenai_settings or {}
         secret = resolve_edenai_secret(config)
+
+        # Distinguer l'origine de la clé (cascade config → compte) pour savoir OÙ corriger.
+        from alambic_core.ai.edenai_ocr import _extract_secret_key
+
+        config_key = _extract_secret_key(getattr(config, "edenai_secret_enc", "") or "")
+        account_key = ""
+        account_id = getattr(config, "account_id", None)
+        if account_id:
+            from alambic_core.models import Account
+
+            acc = s.get(Account, account_id)
+            if acc is not None:
+                account_key = _extract_secret_key(getattr(acc, "edenai_secret_key", "") or "")
+
         region = settings.get("region", "")
         provider = settings.get("vision_llm_provider") or "mistral (défaut)"
         model = settings.get("vision_llm_model") or "pixtral-large-latest (défaut)"
@@ -55,7 +69,15 @@ def main() -> int:
         print("─── Réglages de la config ─────────────────────────────")
         print(f"  config_id        : {config_id}")
         print(f"  multi_doc_detect : {config.multi_doc_detect}")
-        print(f"  clé EdenAI       : {_mask(secret)}")
+        print(f"  clé EdenAI (effective) : {_mask(secret)}")
+        print(f"    ├─ clé sur la CONFIG : {_mask(config_key)}")
+        print(f"    └─ clé sur le COMPTE : {_mask(account_key)}")
+        if config_key and len(config_key) < 20:
+            print("    ⚠ La clé de la CONFIG est courte/suspecte et MASQUE celle du compte.")
+            print("      → Corrige (ou vide) la clé EdenAI sur la CONFIG.")
+        elif not config_key and account_key and len(account_key) < 20:
+            print("    ⚠ La clé du COMPTE est courte/suspecte.")
+            print("      → Corrige la clé EdenAI sur le COMPTE.")
         print(f"  région           : {region or '(vide → défaut)'}")
         print(f"  vision provider  : {provider}")
         print(f"  vision modèle    : {model}")

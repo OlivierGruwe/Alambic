@@ -73,13 +73,20 @@
           </svg>
           Boîtes mail
         </a>
-        <span class="nav-soon" title="Bientôt disponible">
+        <a href="{{ url_for('apikeys.index') }}"
+           class="{{ 'active' if request.blueprint == 'apikeys' }}">
           <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="8" cy="14" r="4"/><path d="M11 11l8-8M16 3h4v4M14 9l2 2"/>
           </svg>
-          API Keys
-          <span class="soon-tag">bientôt</span>
-        </span>
+          Clés API
+        </a>
+        <a href="{{ url_for('bench.index') }}"
+           class="{{ 'active' if request.blueprint == 'bench' }}">
+          <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>
+          </svg>
+          Benchmark
+        </a>
         {% endif %}
 
         <div class="nav-section">Traitement</div>

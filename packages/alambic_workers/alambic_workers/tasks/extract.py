@@ -47,20 +47,42 @@ def _doctype_fields(config, doc_id: str) -> tuple[list, str, str]:
     """Champs + nom + description du doctype RÉELLEMENT classifié pour ce document.
 
     Source de vérité : document.doctype (le type déterminé par la classification
-    pour CE document), résolu en Doctype dans le périmètre du compte de la config
-    (doctypes publics + ceux du compte). Lit doctype.json_content (JSON {fields,
-    description}). Renvoie ([], "", "") si rien d'exploitable.
+    pour CE document). Le doctype est résolu par nom DANS LE PÉRIMÈTRE DE LA
+    CONFIG (les doctypes attendus, attachés via expected_doctypes) — le MÊME
+    périmètre que la classification. C'est essentiel : un doctype attaché à la
+    config peut appartenir à un autre compte ou ne pas être public ; le filtrer
+    par is_public/account_id (comme avant) le ferait disparaître à l'extraction
+    alors que la classification l'a bien utilisé. Repli par nom global si besoin.
+    Lit doctype.json_content (JSON {fields, description}). Renvoie ([], "", "")
+    si rien d'exploitable.
     """
-    from sqlalchemy import or_
+    from alambic_core.services.completeness import doctype_ids_from_expected
 
     with session_scope() as s:
         doc = s.get(Document, doc_id)
         classified = (doc.doctype if doc is not None else "") or ""
 
+        if not classified or classified == "unknown":
+            return [], "", ""
+
         dt = None
-        # 1. Résolution par le type classifié du document (par nom), dans le
-        #    périmètre du compte (publics + compte de la config).
-        if classified and classified != "unknown":
+        # 1. Périmètre config : parmi les doctypes attendus (mêmes que la
+        #    classification), retenir celui dont le nom == type classifié.
+        expected_ids = doctype_ids_from_expected(config) or (
+            (config.edenai_settings or {}).get("doctype_ids") or []
+        )
+        if expected_ids:
+            for did in expected_ids:
+                cand = s.get(Doctype, did)
+                if cand is not None and (cand.doctype_name or "") == classified:
+                    dt = cand
+                    break
+
+        # 2. Repli : résolution par nom dans le périmètre du compte (publics +
+        #    compte de la config), pour les configs sans expected_doctypes.
+        if dt is None:
+            from sqlalchemy import or_
+
             q = s.query(Doctype).filter(Doctype.doctype_name == classified)
             if config.account_id:
                 q = q.filter(
@@ -191,7 +213,27 @@ def extract_document(payload: dict) -> dict:
                 payload["extraction"] = {"skipped": "no_config"}
                 return payload
 
+        # Source des champs à extraire, par ordre de PRIORITÉ :
+        # 1. BASE (via _doctype_fields) : si le type classifié correspond à un
+        #    doctype réel en base, ses champs SONT la source de vérité — ils
+        #    portent les méthodes d'extraction précises (regex, ancres, direction,
+        #    use_ia…). On ne doit JAMAIS les écraser par ceux du payload.
+        # 2. PAYLOAD (payload["fields"]) : uniquement en repli, quand la base ne
+        #    fournit rien — cas let_it_guess où le type a été deviné librement et
+        #    n'existe pas en base. Les champs voyagent alors par le payload.
         fields, doctype_name, doctype_desc = _doctype_fields(config, doc_id)
+        if not fields:
+            payload_fields = payload.get("fields") or []
+            if payload_fields:
+                # let_it_guess : doctype absent de la base, champs devinés dans le
+                # payload. On les utilise sans écraser aucune définition en base.
+                fields = payload_fields
+                doctype_name = (payload.get("classification") or {}).get("type") or ""
+                with session_scope() as s:
+                    d = s.get(Document, doc_id)
+                    doctype_desc = (d.doctype_desc if d is not None else "") or ""
+                    if not doctype_name and d is not None:
+                        doctype_name = d.doctype or ""
         if not fields:
             logger.info("Extraction sautée (doctype sans champs) pour %s", doc_id)
             payload["extraction"] = {"skipped": "no_fields"}

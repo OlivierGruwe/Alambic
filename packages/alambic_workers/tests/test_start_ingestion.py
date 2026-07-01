@@ -66,6 +66,22 @@ def test_parse_upload_key_unknown_origin():
     assert origin == "UNKNOWN"
 
 
+def test_parse_upload_key_mail_and_ws_origins():
+    """Les canaux mail et web service sont reconnus (sinon retombaient UNKNOWN)."""
+    _, _, mail_origin, _ = parse_upload_key("__uploads__/A/C/MAIL/m.eml")
+    assert mail_origin == "MAIL"
+    _, _, ws_origin, _ = parse_upload_key("__uploads__/A/C/WS/doc.pdf")
+    assert ws_origin == "WS"
+
+
+def test_parse_upload_key_ftp_and_s3_origins():
+    """Les imports FTP et S3 sont reconnus (S3 retombait UNKNOWN → « Inconnu »)."""
+    _, _, ftp_origin, _ = parse_upload_key("__uploads__/A/C/FTP/f.pdf")
+    assert ftp_origin == "FTP"
+    _, _, s3_origin, _ = parse_upload_key("__uploads__/A/C/S3/f.pdf")
+    assert s3_origin == "S3"
+
+
 def test_parse_upload_key_malformed():
     with pytest.raises(InvalidInputError):
         parse_upload_key("trop/court")

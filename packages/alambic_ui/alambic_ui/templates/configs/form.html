@@ -108,8 +108,8 @@
     <div class="tabs" role="tablist">
       <button type="button" class="tab active" data-tab="general">Général</button>
       <button type="button" class="tab" data-tab="ia">IA</button>
-      <button type="button" class="tab" data-tab="reco">Reconnaissance</button>
-      <button type="button" class="tab" data-tab="in">Entrées</button>
+
+<button type="button" class="tab" data-tab="in">Entrées</button>
       <button type="button" class="tab" data-tab="out">Sorties</button>
       <button type="button" class="tab" data-tab="propagated">Champs propagés</button>
       <button type="button" class="tab" data-tab="consolidation">Consolidation WS</button>
@@ -165,6 +165,24 @@
           <div class="form-hint">Construit les endpoints (EU / global) et filtre les modèles disponibles.</div>
         </div>
         <div class="form-section-title">OCR</div>
+        {{ sel_kv('ocr_engine', 'Moteur OCR', [('edenai', 'EdenAI (cloud)'), ('tesseract', 'Tesseract (local, souverain)'), ('cascade', 'Cascade (Tesseract, EdenAI en secours)')]) }}
+        <div class="form-hint" style="margin-top:-8px;">
+          <strong>EdenAI</strong> : OCR cloud payant, très robuste.
+          <strong>Tesseract</strong> : OCR local, gratuit et souverain (aucune donnée ne sort), avec prétraitement d'image.
+          <strong>Cascade</strong> : essaie Tesseract d'abord (gratuit) et ne bascule sur EdenAI que si le résultat est insuffisant — le meilleur compromis coût/qualité.
+        </div>
+        {{ sel_kv('ocr_preprocess', 'Prétraitement image', [('single', 'Standard (nettoyage adaptatif)'), ('multi', 'Multi-profils (teste plusieurs nettoyages, + lent)'), ('off', 'Aucun')]) }}
+        <div class="form-hint" style="margin-top:-8px;">
+          Améliore fortement l'OCR sur les documents difficiles (fonds pâles, scans bruités).
+          <strong>Standard</strong> : nettoyage adaptatif, recommandé.
+          <strong>Multi-profils</strong> : teste plusieurs nettoyages et garde le meilleur — plus précis mais plus lent (à réserver aux petits volumes ou aux documents délicats).
+          <strong>Aucun</strong> : image brute (plus rapide, pour documents déjà nets). N'a d'effet que pour Tesseract et Cascade.
+        </div>
+        {{ chk('ocr_rotation', 'Correction automatique de rotation (orientation + redressement)') }}
+        <div class="form-hint" style="margin-top:-8px;">
+          Remet automatiquement le document à l'endroit s'il est tourné (90/180/270°) et corrige les petits désalignements d'un scan de travers. Prudent : n'agit que si la détection est fiable. N'a d'effet que pour Tesseract et Cascade.
+        </div>
+        {{ txt('ocr_max_pixels', 'Taille max image (Mpx, optionnel)', 'Au-delà de cette taille (en millions de pixels), une image est réduite avant OCR. Protège contre les images géantes qui ralentissent le traitement et gonflent le coût EdenAI. Vide = défaut (24 Mpx). Ex. : 24.') }}
         {{ txt('ocr_end_point', 'Endpoint OCR (optionnel)', 'Laisser vide : construit depuis la région. Sinon, force l\'URL EdenAI OCR.') }}
         {{ provider_select('ocr_provider', 'Provider OCR', '', '', 'ocr') }}
         {{ sel_kv('ocr_language', 'Langue OCR', ocr_languages) }}
@@ -189,15 +207,6 @@
         <div class="form-hint" id="edenai-account-hint" style="display:none; margin-top:-12px;">
           ✓ Le compte sélectionné dispose d'une clé EdenAI (utilisée par défaut).
         </div>
-      </div>
-
-      <!-- RECONNAISSANCE -->
-      <div class="tab-panel" data-panel="reco">
-        {{ txt('vision_end_point', 'Endpoint vision (optionnel)', 'Laisser vide : construit depuis la région (LLM chat). Sinon, force l\'URL pour la détection multi-document.') }}
-        {{ provider_select('vision_llm_provider', 'Vision LLM — provider', 'vision_llm_model') }}
-        {{ model_select('vision_llm_model', 'Vision LLM — modèle', 'vision_llm_provider') }}
-        {{ provider_select('fallback_vision_llm_provider', 'Vision LLM — provider (fallback)', 'fallback_vision_llm_model', 'vision_llm_provider') }}
-        {{ model_select('fallback_vision_llm_model', 'Vision LLM — modèle (fallback)', 'fallback_vision_llm_provider') }}
       </div>
 
       <!-- ENTRÉES -->
@@ -533,8 +542,7 @@
     var paths = {
       'ocr_end_point': '/v3/universal-ai',
       'classifier_end_point': '/v3/llm/chat/completions',
-      'extract_end_point': '/v3/llm/chat/completions',
-      'vision_end_point': '/v3/chat/completions'
+      'extract_end_point': '/v3/llm/chat/completions'
     };
     Object.keys(paths).forEach(function(name) {
       var el = document.querySelector('input[name="' + name + '"]');

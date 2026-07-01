@@ -153,3 +153,21 @@ def test_validated_document_still_editable(app_ctx):
         headers={"X-CSRFToken": tok},
     )
     assert r.status_code == 200
+
+
+def test_transactions_list_shows_origin_column(app_ctx):
+    """La liste des transactions affiche la colonne Origine (libellés lisibles)."""
+    from alambic_core.models import Transaction
+
+    app, Sess = app_ctx
+    with Sess() as s:
+        s.add(Transaction(id="tx-m", status="WORKING", process="OCR", origin="MAIL", nb_docs=1))
+        s.add(Transaction(id="tx-w", status="WORKING", process="OCR", origin="WS", nb_docs=1))
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    page = client.get("/transactions/").get_data(as_text=True)
+    assert "Origine" in page
+    assert "Mail" in page
+    assert "Web service" in page

@@ -22,6 +22,35 @@ def _session():
     return get_sessionmaker()()
 
 
+def _account_credits(session, acc) -> dict:
+    """Récupère le solde EdenAI du compte + la projection d'autonomie.
+
+    Dégrade proprement : si pas de clé ou EdenAI indisponible, renvoie un dict
+    avec available=False (l'UI affiche « indisponible »).
+    """
+    from alambic_core.ai.edenai_credits import get_credits
+    from alambic_core.ai.edenai_ocr import _extract_secret_key
+    from alambic_core.services.credit_forecast import forecast_for_account
+
+    secret = _extract_secret_key(acc.edenai_secret_key or "")
+    if not secret:
+        return {"available": False, "reason": "no_key"}
+
+    cr = get_credits(secret)
+    credits = cr.credits if cr.ok else None
+    fc = forecast_for_account(session, acc.id, credits)
+    return {
+        "available": cr.ok,
+        "reason": cr.error,
+        "credits": credits,
+        "from_cache": cr.from_cache,
+        "spend_last_7d": fc.spend_last_7d,
+        "daily_spend": fc.daily_spend,
+        "days_remaining": fc.days_remaining,
+        "depletion_date": fc.depletion_date,
+    }
+
+
 @accounts_bp.route("/")
 @admin_required
 def list_accounts():
@@ -59,6 +88,10 @@ def _apply_common_fields(acc, form) -> None:
     acc.zip = form.zip.data or ""
     acc.town = form.town.data or ""
     acc.country = form.country.data or ""
+    acc.contact_name = form.contact_name.data or ""
+    acc.contact_role = form.contact_role.data or ""
+    acc.contact_email = form.contact_email.data or ""
+    acc.contact_phone = form.contact_phone.data or ""
     acc.enrich_allowed_domains = form.enrich_allowed_domains.data or ""
 
 
@@ -97,6 +130,7 @@ def edit_account(account_id: str):
             # On ne pré-remplit JAMAIS le secret (champ masqué).
             form.edenai_secret_key.data = ""
             has_secret = bool(acc.edenai_secret_key)
+            credits = _account_credits(s, acc)
             s.expunge_all()
             return render_template(
                 "accounts/form.html",
@@ -104,6 +138,7 @@ def edit_account(account_id: str):
                 mode="edit",
                 account_id=account_id,
                 has_secret=has_secret,
+                credits=credits,
             )
 
         form = AccountForm()

@@ -58,6 +58,25 @@
     color: var(--navy);
   }
   .panel-body { padding: 8px 0; }
+  /* Le contenu texte direct d'un panel-body (paragraphes, encarts, légendes,
+     barres) doit respecter la marge latérale du panneau — sans elle, il colle
+     au cadre. Les tables .dash-table gardent leur propre padding de cellule
+     (18px), donc on ne les repadde pas ici. */
+  .panel-body > p,
+  .panel-body > .proj-basis,
+  .panel-body > .proj-note,
+  .panel-body > .proj-detail,
+  .panel-body > .proj-list,
+  .panel-body > .cls-lead,
+  .panel-body > .cls-bar,
+  .panel-body > .cls-legend,
+  .panel-body > .cls-hint {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  /* Encart à fond (estimation haute) : marge latérale plutôt que padding, pour
+     que le fond coloré ne touche pas les bords du panneau. */
+  .panel-body > .proj-warn { margin-left: 18px; margin-right: 18px; }
 
   .row-line {
     display: flex;
@@ -392,6 +411,31 @@
   </div>
 </div>
 
+{# ─── Crédits EdenAI par compte ────────────────────────────────────── #}
+{% if credits_accounts %}
+<div class="panel">
+  <div class="panel-head">Crédits EdenAI & autonomie</div>
+  <div class="panel-body">
+    <table class="dash-table">
+      <thead>
+        <tr><th>Compte</th><th>Crédits</th><th>Dépense / jour</th><th>Autonomie</th><th>Rupture estimée</th></tr>
+      </thead>
+      <tbody>
+        {% for c in credits_accounts %}
+        <tr>
+          <td>{{ c.account_name }}</td>
+          <td class="mono">{% if c.available %}${{ "%.2f"|format(c.credits) }}{% else %}—{% endif %}</td>
+          <td class="mono">{{ "%.4f"|format(c.daily_spend) }} €</td>
+          <td class="mono">{% if c.days_remaining is not none %}{{ "%.0f"|format(c.days_remaining) }} j{% else %}—{% endif %}</td>
+          <td>{% if c.depletion_date %}{{ c.depletion_date.strftime("%d/%m/%Y") }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {# ─── Activité récente ─────────────────────────────────────────────── #}
 <div class="panel">
   <div class="panel-head">Activité récente</div>
@@ -399,12 +443,15 @@
     {% if recent %}
     <table class="dash-table">
       <thead>
-        <tr><th>Transaction</th><th>Statut</th><th>Étape</th><th>Documents</th><th>Mise à jour</th></tr>
+        <tr><th>Transaction</th><th>Compte</th><th>Config</th><th>Origine</th><th>Statut</th><th>Étape</th><th>Documents</th><th>Mise à jour</th></tr>
       </thead>
       <tbody>
         {% for tx in recent %}
         <tr>
           <td class="mono">{{ tx.id }}</td>
+          <td>{{ tx.account }}</td>
+          <td>{{ tx.config }}</td>
+          <td>{{ tx.origin }}</td>
           <td>{{ tx.status }}</td>
           <td>{{ tx.process }}</td>
           <td class="mono">{{ tx.nb_docs }}</td>

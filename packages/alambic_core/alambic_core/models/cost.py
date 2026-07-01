@@ -22,11 +22,15 @@ class Cost(Base, TimestampMixin):
     account_id: Mapped[str | None] = mapped_column(
         ForeignKey("accounts.id", ondelete="SET NULL"), nullable=True
     )
+    # SET NULL (et non CASCADE) : supprimer une transaction ou un document NE
+    # supprime PAS ses coûts — on les découple (référence → NULL) pour préserver
+    # l'historique statistique (projection, dépenses, autonomie). Le coût garde
+    # son account_id, son montant, sa date et son process.
     transaction_id: Mapped[str | None] = mapped_column(
-        ForeignKey("transactions.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True
     )
     document_id: Mapped[str | None] = mapped_column(
-        ForeignKey("documents.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
     )
     process: Mapped[str] = mapped_column(String(40), nullable=False, default="")
     provider: Mapped[str] = mapped_column(String(100), nullable=False, default="")

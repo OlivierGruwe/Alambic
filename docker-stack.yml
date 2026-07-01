@@ -125,11 +125,38 @@ services:
     command: gunicorn "alambic_ui:create_app()" --bind 0.0.0.0:5000 --workers ${UI_WORKERS:-2} --timeout 120
     environment: *app-env
     networks: [alambic_net]
-    ports:
-      - "${UI_PORT:-5000}:5000"
+    # Plus de port publié : joignable uniquement par Caddy sur le réseau interne.
     deploy:
       replicas: 1
       <<: *restart
+
+  # Reverse proxy TLS (HTTPS) devant l'UI/WS. Point d'entrée unique.
+  caddy:
+    image: caddy:2-alpine
+    networks: [alambic_net]
+    ports:
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTP_PORT:-80}:80"
+    environment:
+      ALAMBIC_DOMAIN: ${ALAMBIC_DOMAIN:-localhost}
+      ALAMBIC_TLS_EMAIL: ${ALAMBIC_TLS_EMAIL:-}
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    deploy:
+      replicas: 1
+      <<: *restart
+
+configs:
+  caddyfile:
+    file: ./caddy/Caddyfile
+
+volumes:
+  caddy_data:
+  caddy_config:
 
 networks:
   alambic_net:

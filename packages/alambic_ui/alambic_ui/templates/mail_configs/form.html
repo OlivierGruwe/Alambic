@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Nouvelle boîte mail' if mode == 'create' else 'Éditer la boîte mail' }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ 'Nouvelle boîte mail' if mode == 'create' else 'Éditer la boîte mail' }}</h1>
+    <div class="subtitle">Relève IMAP périodique — les mails reçus deviennent des transactions.</div>
+  </div>
+</div>
+
+<div class="card form-card" style="padding: 0;">
+  <form method="POST">
+    {{ form.hidden_tag() }}
+
+    <div class="tab-body">
+    <h3 class="form-section-title">Général</h3>
+    <div class="form-group">
+      {{ form.mailconfig_name.label }}
+      {{ form.mailconfig_name(class="form-control") }}
+      {% if form.mailconfig_name.errors %}<div class="form-errors">{{ form.mailconfig_name.errors[0] }}</div>{% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.email_address.label }}
+      {{ form.email_address(class="form-control") }}
+    </div>
+    <div class="form-row">
+      <div class="form-group">{{ form.account_id.label }} {{ form.account_id(class="form-control") }}</div>
+      <div class="form-group">{{ form.config_id.label }} {{ form.config_id(class="form-control") }}</div>
+    </div>
+    <div class="form-group"><div class="form-check">{{ form.is_active() }} {{ form.is_active.label }}</div></div>
+
+    <h3 class="form-section-title">Connexion IMAP</h3>
+    <div class="form-row">
+      <div class="form-group" style="flex:2;">{{ form.imap_server.label }} {{ form.imap_server(class="form-control") }}</div>
+      <div class="form-group">{{ form.imap_port.label }} {{ form.imap_port(class="form-control") }}</div>
+    </div>
+    <div class="form-group">
+      {{ form.imap_password.label }}
+      {{ form.imap_password(class="form-control", autocomplete="new-password", placeholder=('••••••••' if has_secret else '')) }}
+      {% if has_secret %}<div class="form-hint">Laisser vide pour conserver le mot de passe actuel.</div>{% endif %}
+    </div>
+    <div class="form-row">
+      <div class="form-group">{{ form.imap_inbox.label }} {{ form.imap_inbox(class="form-control") }}</div>
+      <div class="form-group">{{ form.imap_search_criteria.label }} {{ form.imap_search_criteria(class="form-control") }}</div>
+    </div>
+    <div class="form-group">{{ form.imap_alias.label }} {{ form.imap_alias(class="form-control") }}</div>
+
+    <h3 class="form-section-title">Contenu et filtres</h3>
+    <div class="form-group">{{ form.content_mode.label }} {{ form.content_mode(class="form-control") }}</div>
+    <div class="form-group">
+      {{ form.filter_attachment_extensions.label }}
+      {{ form.filter_attachment_extensions(class="form-control", placeholder=".pdf,.docx") }}
+      <div class="form-hint">Extensions de pièces jointes autorisées, séparées par des virgules. Vide = toutes.</div>
+    </div>
+    <div class="form-group">
+      {{ form.sender_whitelist.label }}
+      {{ form.sender_whitelist(class="form-control", rows="2", placeholder="*@arondor.com, factures@fournisseur.fr") }}
+      <div class="form-hint">Expéditeurs autorisés (jokers * et ?). Vide = tous acceptés.</div>
+    </div>
+
+    <h3 class="form-section-title">Après traitement</h3>
+    <div class="form-row">
+      <div class="form-group">{{ form.after_process_action.label }} {{ form.after_process_action(class="form-control") }}</div>
+      <div class="form-group">{{ form.after_process_folder.label }} {{ form.after_process_folder(class="form-control") }}</div>
+    </div>
+    </div>
+
+    <div class="form-actions" style="padding: 0 28px 28px;">
+      <a href="{{ url_for('mail_configs.list_mail_configs') }}" class="btn btn-secondary">Annuler</a>
+      {{ form.submit(class="btn btn-primary") }}
+    </div>
+  </form>
+</div>
+{% endblock %}

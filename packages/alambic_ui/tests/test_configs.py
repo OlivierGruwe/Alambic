@@ -58,13 +58,16 @@ def test_create_config_maps_to_blocks(app_ctx):
         assert json.loads(cfg.flower_enc)["token"] == "TOK1"
 
 
-def test_five_tabs_present(app_ctx):
+def test_config_tabs_present(app_ctx):
     app, _ = app_ctx
     client = app.test_client()
     login(client)
     page = client.get("/configs/new").get_data(as_text=True)
-    for tab in ["Général", "IA", "Reconnaissance", "Entrées", "Sorties"]:
+    # L'onglet « Reconnaissance » (réglages vision LLM) a été retiré : la
+    # détection multi-document est désormais locale (OpenCV), sans config vision.
+    for tab in ["Général", "IA", "Entrées", "Sorties"]:
         assert tab in page
+    assert 'data-tab="reco"' not in page
     # Export WS est maintenant une section de Sorties, pas un onglet
     assert 'data-tab="export"' not in page
     assert 'data-way="WS"' in page
@@ -197,7 +200,7 @@ def test_region_field_present_on_create(app_ctx):
 
 
 def test_endpoints_exposed_as_optional_overrides(app_ctx):
-    """Les endpoints OCR/classif/extract/vision sont exposés (surcharges optionnelles)."""
+    """Les endpoints OCR/classif/extract sont exposés (surcharges optionnelles)."""
     app, _ = app_ctx
     client = app.test_client()
     login(client)
@@ -206,7 +209,8 @@ def test_endpoints_exposed_as_optional_overrides(app_ctx):
     assert 'name="ocr_end_point"' in page
     assert 'name="classifier_end_point"' in page
     assert 'name="extract_end_point"' in page
-    assert 'name="vision_end_point"' in page
+    # La détection multi-document est désormais locale (OpenCV) : plus d'endpoint vision.
+    assert 'name="vision_end_point"' not in page
     # L'embedding reste servi en local (TEI) : pas d'endpoint embedding dans la config.
     assert 'name="embedding_end_point"' not in page
     # Plus aucune trace de l'ancien endpoint v2 obsolète.
@@ -459,3 +463,63 @@ def test_placeholder_secret_does_not_overwrite_key(app_ctx):
         s.commit()
     with Sess() as s:
         assert real in s.get(Config, "cfg-sec").edenai_secret_enc
+
+
+def test_ocr_engine_selector_present(app_ctx):
+    """Le sélecteur de moteur OCR (EdenAI / Tesseract) est exposé dans la config."""
+    app, _ = app_ctx
+    client = app.test_client()
+    login(client)
+    page = client.get("/configs/new").get_data(as_text=True)
+    assert 'name="ocr_engine"' in page
+    assert "Tesseract" in page
+
+
+def test_ocr_engine_persists(app_ctx):
+    """Le moteur OCR choisi est enregistré dans edenai_settings."""
+    from alambic_ui.config_schema import apply_form_to_config
+
+    _app, Sess = app_ctx
+    from alambic_core.models import Config
+
+    with Sess() as s:
+        cfg = Config(id="cfg-eng", config_name="c")
+        apply_form_to_config(cfg, {"config_name": "c", "ocr_engine": "tesseract"})
+        s.add(cfg)
+        s.commit()
+    with Sess() as s:
+        assert s.get(Config, "cfg-eng").edenai_settings.get("ocr_engine") == "tesseract"
+
+
+def test_ocr_preprocess_and_rotation_options(app_ctx):
+    """Les options de prétraitement, cascade et rotation sont exposées avec aide."""
+    app, _ = app_ctx
+    client = app.test_client()
+    login(client)
+    page = client.get("/configs/new").get_data(as_text=True)
+    # Options présentes.
+    assert 'name="ocr_preprocess"' in page
+    assert 'name="ocr_rotation"' in page
+    assert "Cascade" in page
+    # Explications présentes (l'utilisateur est guidé).
+    assert "Multi-profils" in page
+    assert "à l'endroit" in page  # aide de la rotation
+
+
+def test_ocr_advanced_options_persist(app_ctx):
+    from alambic_ui.config_schema import apply_form_to_config
+
+    _app, Sess = app_ctx
+    from alambic_core.models import Config
+
+    with Sess() as s:
+        cfg = Config(id="cfg-ocr", config_name="c")
+        apply_form_to_config(cfg, {"config_name": "c", "ocr_engine": "cascade",
+                                   "ocr_preprocess": "multi", "ocr_rotation": "on"})
+        s.add(cfg)
+        s.commit()
+    with Sess() as s:
+        st = s.get(Config, "cfg-ocr").edenai_settings
+        assert st.get("ocr_engine") == "cascade"
+        assert st.get("ocr_preprocess") == "multi"
+        assert st.get("ocr_rotation") is True

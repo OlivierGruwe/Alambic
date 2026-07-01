@@ -39,6 +39,10 @@ EDENAI_KEYS = [
     # Région EdenAI (pivot : construit les endpoints et filtre les modèles)
     "region",
     # OCR
+    "ocr_engine",
+    "ocr_preprocess",
+    "ocr_rotation",
+    "ocr_max_pixels",
     "ocr_end_point",
     "ocr_provider",
     "ocr_language",
@@ -59,12 +63,6 @@ EDENAI_KEYS = [
     "extract_model",
     "fallback_extract_provider",
     "fallback_extract_model",
-    # Reconnaissance (vision LLM — détection multi-document)
-    "vision_end_point",
-    "vision_llm_provider",
-    "vision_llm_model",
-    "fallback_vision_llm_provider",
-    "fallback_vision_llm_model",
 ]
 
 # ── Onglets ENTRÉES / SORTIES : bloc JSONB "ws" (non-secrets) ─────────────────
@@ -139,6 +137,9 @@ DEFAULTS = {
     "export_verify_ssl": True,
     "way_in": "S3",
     "way_out": "S3",
+    # OCR : prétraitement image (single par défaut) + rotation auto activée.
+    "ocr_preprocess": "single",
+    "ocr_rotation": True,
     # Région EdenAI : pivot qui construit les endpoints (api.eu. vs api.) et
     # filtre les modèles. Les anciens *_end_point ne sont plus saisis.
     "region": "eu",
@@ -174,6 +175,7 @@ SECRET_FORM_KEYS = {fk for mapping in SECRET_BLOCKS.values() for fk in mapping}
 BOOL_KEYS = {
     "classifier_let_it_guess",
     "ocr_treat_images",
+    "ocr_rotation",
     "export_verify_ssl",
 }
 

@@ -241,15 +241,24 @@ def _processing_times(s, since) -> list:
 
 def _recent_transactions(s, since, limit: int = 10) -> list:
     """Dernières transactions de la période, triées par activité."""
+    from alambic_core.domain.origins import origin_label
+    from alambic_core.models import Account, Config
+
     rows = (
         _scope_period(_scope_account(s.query(Transaction), Transaction), Transaction, since)
         .order_by(Transaction.updated_at.desc())
         .limit(limit)
         .all()
     )
+    # Mappings id → nom pour afficher des libellés lisibles (compte, config).
+    account_names = {a.id: a.account_name for a in s.query(Account).all()}
+    config_names = {c.id: c.config_name for c in s.query(Config).all()}
     return [
         {
             "id": tx.id,
+            "account": account_names.get(tx.account_id, tx.account_id or "—"),
+            "config": config_names.get(tx.config_id, tx.config_id or "—"),
+            "origin": origin_label(tx.origin),
             "status": tx.status,
             "process": tx.process,
             "nb_docs": tx.nb_docs,
@@ -257,6 +266,42 @@ def _recent_transactions(s, since, limit: int = 10) -> list:
         }
         for tx in rows
     ]
+
+
+def _credits_by_account(s) -> list:
+    """Solde EdenAI + autonomie pour chaque compte visible ayant une clé.
+
+    Réservé au super-admin pour la vue multi-comptes ; un admin de compte ne voit
+    que le sien. Dégrade proprement si EdenAI est injoignable.
+    """
+    from alambic_core.ai.edenai_credits import get_credits
+    from alambic_core.ai.edenai_ocr import _extract_secret_key
+    from alambic_core.models import Account
+    from alambic_core.services.credit_forecast import forecast_for_account
+
+    q = s.query(Account).order_by(Account.account_name)
+    if not current_user.is_super_admin:
+        q = q.filter(Account.id == current_user.account_id)
+
+    out = []
+    for acc in q.all():
+        secret = _extract_secret_key(acc.edenai_secret_key or "")
+        if not secret:
+            continue  # pas de clé → pas de solde à afficher
+        cr = get_credits(secret)
+        credits = cr.credits if cr.ok else None
+        fc = forecast_for_account(s, acc.id, credits)
+        out.append(
+            {
+                "account_name": acc.account_name,
+                "available": cr.ok,
+                "credits": credits,
+                "daily_spend": fc.daily_spend,
+                "days_remaining": fc.days_remaining,
+                "depletion_date": fc.depletion_date,
+            }
+        )
+    return out
 
 
 @dashboard_bp.route("/")
@@ -275,6 +320,7 @@ def index():
             "classification": _classification_breakdown(s, since),
             "processing_times": _processing_times(s, since),
             "recent": _recent_transactions(s, since),
+            "credits_accounts": _credits_by_account(s),
             "period": period_key,
             "period_label": _PERIODS[period_key][0],
             "periods": [(k, label) for k, (label, _d) in _PERIODS.items()],

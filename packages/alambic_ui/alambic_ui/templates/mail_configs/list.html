@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Boîtes mail{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Boîtes mail</h1>
+    <div class="subtitle">{{ mail_configs|length }} boîte{{ 's' if mail_configs|length != 1 }} relevée{{ 's' if mail_configs|length != 1 }} par IMAP</div>
+  </div>
+  <a href="{{ url_for('mail_configs.create_mail_config') }}" class="btn btn-primary">Nouvelle boîte mail</a>
+</div>
+
+{% if mail_configs %}
+<div class="card">
+  <table class="responsive-table">
+    <thead>
+      <tr><th>Nom</th><th>Adresse</th><th>Serveur</th><th>Contenu</th><th>État</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for mc in mail_configs %}
+      <tr>
+        <td data-label="Nom"><strong>{{ mc.mailconfig_name }}</strong></td>
+        <td data-label="Adresse">{{ mc.email_address }}</td>
+        <td data-label="Serveur">{{ mc.imap_server }}:{{ mc.imap_port }}</td>
+        <td data-label="Contenu">
+          {% if mc.content_mode == 'body' %}Corps seul
+          {% elif mc.content_mode == 'attachments' %}PJ seules
+          {% else %}Corps + PJ{% endif %}
+        </td>
+        <td data-label="État">
+          {% if mc.is_active %}
+            <span class="badge badge-active">Active</span>
+          {% else %}
+            <span class="badge badge-inactive">Inactive</span>
+          {% endif %}
+        </td>
+        <td data-label="Actions">
+          <div class="row-actions">
+            <a href="{{ url_for('mail_configs.edit_mail_config', mail_config_id=mc.id) }}" class="btn btn-secondary btn-sm">Éditer</a>
+            <form method="POST" action="{{ url_for('mail_configs.delete_mail_config', mail_config_id=mc.id) }}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Supprimer la boîte mail {{ mc.mailconfig_name }} ?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-ghost btn-sm">Supprimer</button>
+            </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card"><div class="empty">
+  <h3>Aucune boîte mail</h3>
+  <p>Configurez une boîte IMAP pour ingérer automatiquement les mails reçus.</p>
+  <a href="{{ url_for('mail_configs.create_mail_config') }}" class="btn btn-primary">Nouvelle boîte mail</a>
+</div></div>
+{% endif %}
+{% endblock %}

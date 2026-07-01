@@ -17,6 +17,7 @@ import tempfile
 from alambic_core import storage
 from alambic_core.ai.edenai_ocr import DocumentOcr, ocr_config_from_config
 from alambic_core.ai.pdf_extractor import PdfExtractor
+from alambic_core.ai.tesseract_ocr import tesseract_config_from_config
 from alambic_core.db.session import session_scope
 from alambic_core.models import Config, Document
 from alambic_core.pipeline.step import step
@@ -24,6 +25,25 @@ from alambic_core.pipeline.step import step
 logger = logging.getLogger(__name__)
 
 PROCESS_OCR = "OCR_READER"
+
+
+def _build_ocr_client(config):
+    """Choisit le moteur OCR selon la config :
+    - « tesseract » : local, gratuit, souverain (avec prétraitement) ;
+    - « cascade »   : Tesseract d'abord, EdenAI en secours si score faible ;
+    - défaut/« edenai » : EdenAI (cloud).
+    Tous exposent ocr_bytes()->OcrResult, donc PdfExtractor les utilise pareil."""
+    engine = ((config.edenai_settings or {}).get("ocr_engine") or "edenai").lower()
+    if engine == "tesseract":
+        return tesseract_config_from_config(config)
+    if engine == "cascade":
+        from alambic_core.ai.cascade_ocr import CascadeOcr
+
+        return CascadeOcr(
+            tesseract_config_from_config(config),
+            DocumentOcr(ocr_config_from_config(config)),
+        )
+    return DocumentOcr(ocr_config_from_config(config))
 
 
 def read_ocr_document(payload: dict) -> dict:
@@ -42,25 +62,35 @@ def read_ocr_document(payload: dict) -> dict:
         if st.skipped:
             return payload
 
-        # Config OCR (provider, endpoint, clé déchiffrée).
+        # Config OCR (moteur, provider, endpoint, clé déchiffrée).
         with session_scope() as s:
             config = s.get(Config, config_id) if config_id else None
             if config is None:
                 logger.warning("OCR : config %s introuvable, étape sautée", config_id)
                 payload["ocr"] = {"skipped": "no_config"}
                 return payload
-            ocr_conf = ocr_config_from_config(config)
+            ocr_client = _build_ocr_client(config)
             treat_images = bool((config.edenai_settings or {}).get("ocr_treat_images"))
+            # Garde-fou taille image (optionnel) : Mpx max avant redimensionnement.
+            raw_mpx = (config.edenai_settings or {}).get("ocr_max_pixels")
 
         # Téléchargement du PDF.
         work_dir = tempfile.mkdtemp(prefix="alambic_ocr_")
         local_pdf = os.path.join(work_dir, os.path.basename(key) or "doc.pdf")
         storage.download_to(bucket, key, local_pdf)
 
+        # Conversion Mpx → pixels (config exprimée en millions de pixels).
+        max_image_pixels = None
+        try:
+            if raw_mpx:
+                max_image_pixels = int(float(raw_mpx) * 1_000_000)
+        except (TypeError, ValueError):
+            max_image_pixels = None
+
         # Extraction hybride (texte natif + OCR sélectif), barcodes réinjectés.
-        ocr_client = DocumentOcr(ocr_conf)
         extractor = PdfExtractor(
-            local_pdf, ocr_client, treat_images=treat_images, barcodes=barcodes
+            local_pdf, ocr_client, treat_images=treat_images, barcodes=barcodes,
+            max_image_pixels=max_image_pixels,
         )
         extractor.parse()
 

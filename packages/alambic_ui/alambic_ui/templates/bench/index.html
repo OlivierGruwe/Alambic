@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Benchmark — Robustesse{% endblock %}
+
+{% block head %}
+<style>
+  .bench-intro { color: var(--slate-600, #475569); margin-bottom: 16px; max-width: 760px; }
+  .bench-actions { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
+  .bench-actions label { font-size: 13px; color: var(--slate-600, #475569); display: flex; gap: 6px; align-items: center; }
+  .bench-summary { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-weight: 600; }
+  .bench-summary.ok { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+  .bench-summary.ko { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .bench-verdict { font-weight: 600; }
+  .bench-verdict.ok, .bench-verdict.handled { color: #059669; }
+  .bench-verdict.CRASH, .bench-verdict.timeout { color: #dc2626; }
+  .bench-table td.mono { font-variant-numeric: tabular-nums; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Benchmark — Robustesse</h1>
+  </div>
+</div>
+
+<p class="bench-intro">
+  Éprouve la robustesse du pipeline face à des documents pathologiques (PDF
+  corrompu, fichier vide, image géante, PDF de nombreuses pages, nom exotique…).
+  Chaque cas doit <strong>dégrader proprement</strong> plutôt que de faire planter
+  un worker. Le banc ne touche ni la base ni le broker : il éprouve les briques de
+  traitement sur des documents générés à la volée.
+</p>
+
+<div class="bench-actions">
+  <a class="btn btn-primary" href="{{ url_for('bench.index', run='1', heavy='1' if include_heavy else None) }}">
+    Lancer le benchmark
+  </a>
+  <label>
+    <input type="checkbox" onclick="
+      const u = new URL(window.location.href.split('?')[0] + '?run=1');
+      if (this.checked) u.searchParams.set('heavy','1');
+      window.location.href = u.toString();
+    " {{ 'checked' if include_heavy }}>
+    Inclure les cas lourds (500 pages, image géante — plus lent)
+  </label>
+</div>
+
+{% if ran and report %}
+  {% if report.crashes %}
+  <div class="bench-summary ko">
+    ⚠ {{ report.crashes|length }} crash(es) détecté(s) sur {{ report.total }} cas — à corriger.
+  </div>
+  {% else %}
+  <div class="bench-summary ok">
+    ✓ {{ report.passed }}/{{ report.total }} — aucun crash : le pipeline dégrade proprement.
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <table class="bench-table">
+      <thead>
+        <tr><th>Cas</th><th>Attendu</th><th>Verdict</th><th>Temps</th><th>Détail</th></tr>
+      </thead>
+      <tbody>
+        {% for r in report.results %}
+        <tr>
+          <td>{{ r.name }}<div style="font-size:11px;color:var(--slate-400,#94a3b8);">{{ r.description }}</div></td>
+          <td>{{ r.expects }}</td>
+          <td class="bench-verdict {{ r.outcome }}">
+            {% if r.outcome in ('ok','handled') %}✓{% else %}✗{% endif %} {{ r.outcome }}
+          </td>
+          <td class="mono">{{ "%.2f"|format(r.elapsed_s) }}s</td>
+          <td style="font-size:12px;color:var(--slate-500,#64748b);">{{ r.detail }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% elif ran %}
+  <div class="bench-summary ko">Le benchmark n'a pas produit de résultat.</div>
+{% endif %}
+{% endblock %}

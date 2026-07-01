@@ -145,3 +145,44 @@ def test_projection_floor_and_warning(app_ctx):
     assert "À maturité" in html or "maturité" in html
     # Avertissement bootstrap (part LLM élevée).
     assert "Estimation haute" in html
+
+
+def test_recent_activity_shows_account_and_config(app_ctx):
+    """L'activité récente affiche les colonnes Compte et Config (par nom)."""
+    from alambic_core.models import Account, Config, Transaction
+
+    app, Sess = app_ctx
+    with Sess() as s:
+        s.add(Account(id="acc1", account_name="Arondor"))
+        s.add(Config(id="cfg1", config_name="auto", account_id="acc1"))
+        s.add(Transaction(id="tx-recent", status="WORKING", process="OCR",
+                          nb_docs=2, account_id="acc1", config_id="cfg1"))
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    page = client.get("/dashboard/").get_data(as_text=True)
+    # En-têtes de colonnes présents.
+    assert "Compte" in page
+    assert "Config" in page
+    # Les noms (pas les ids) sont affichés.
+    assert "Arondor" in page
+    assert "auto" in page
+
+
+def test_recent_activity_shows_origin(app_ctx):
+    """L'activité récente affiche l'origine (canal) des transactions."""
+    from alambic_core.models import Transaction
+
+    app, Sess = app_ctx
+    with Sess() as s:
+        s.add(Transaction(id="tx-m", status="WORKING", process="OCR", origin="MAIL", nb_docs=1))
+        s.add(Transaction(id="tx-w", status="WORKING", process="OCR", origin="WS", nb_docs=1))
+        s.commit()
+
+    client = app.test_client()
+    login(client)
+    page = client.get("/dashboard/").get_data(as_text=True)
+    assert "Origine" in page
+    assert "Mail" in page
+    assert "Web service" in page

@@ -15,6 +15,8 @@ dependencies = [
     "pillow>=10,<13",         # lecture images
     "reportlab>=4,<5",        # image → PDF
     "pymupdf>=1.24,<2",       # comptage de pages PDF + rendu readCAB
+    "opencv-python-headless>=4.9,<5",  # segmentation multi-document (locale)
+    "pytesseract>=0.3.10,<0.4",  # OCR local Tesseract (alternative souveraine à EdenAI)
     "zxing-cpp>=2,<3",        # lecture des codes-barres (readCAB)
     "chardet>=5,<6",          # détection d'encodage texte
 ]

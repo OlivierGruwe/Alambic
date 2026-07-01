@@ -141,7 +141,39 @@ services:
   ui:
     <<: [*app-image, *app-common]
     command: gunicorn "alambic_ui:create_app()" --bind 0.0.0.0:5000 --workers ${UI_WORKERS:-2} --timeout 120
-    ports:
-      - "${UI_PORT:-5000}:5000"
+    # Plus de port publié : l'UI/WS n'est JOINTE que par Caddy sur le réseau
+    # interne. Toute exposition externe passe par le proxy TLS (HTTPS).
+    expose:
+      - "5000"
     deploy:
       replicas: 1
+
+  # ── Caddy : reverse proxy + terminaison TLS (HTTPS) devant l'UI/WS ─────────
+  # Point d'entrée HTTPS unique. Termine le TLS et proxifie vers ui:5000 en
+  # HTTP sur le réseau interne Docker. Par défaut, certificat AUTO-SIGNÉ interne
+  # (souverain, aucune dépendance externe — idéal self-hosted/air-gapped) via
+  # « tls internal » dans le Caddyfile. Pour un domaine public + Let's Encrypt,
+  # renseigner ALAMBIC_DOMAIN et ALAMBIC_TLS_EMAIL et adapter le Caddyfile.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    networks:
+      - alambic_net
+    ports:
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTP_PORT:-80}:80"
+    environment:
+      # Nom de domaine servi. Par défaut « localhost » → certificat interne.
+      ALAMBIC_DOMAIN: ${ALAMBIC_DOMAIN:-localhost}
+      ALAMBIC_TLS_EMAIL: ${ALAMBIC_TLS_EMAIL:-}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Persistance des certificats générés (évite de les régénérer au redémarrage).
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - ui
+
+volumes:
+  caddy_data:
+  caddy_config:

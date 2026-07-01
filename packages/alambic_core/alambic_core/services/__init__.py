@@ -2,6 +2,7 @@
 
 from .auto_validation import decide_validation_status
 from .completeness import CompletenessResult, compute_completeness, doctype_ids_from_expected
+from .config_duplication import duplicate_config
 from .config_fields import computed_tokens, resolve_config_field, resolve_config_fields
 from .consolidation import enrich_indexes, parse_target_field
 from .consolidation_client import call_consolidation_ws
@@ -11,7 +12,6 @@ from .consolidation_ws import (
     validate_ws_definition,
     ws_by_name,
 )
-from .config_duplication import duplicate_config
 from .deletion import DeletionResult, delete_transaction, transaction_work_prefix
 from .export_sweep import find_pending_exports, sweep_exports
 from .orphan_sweep import OrphanSweepResult, sweep_orphans

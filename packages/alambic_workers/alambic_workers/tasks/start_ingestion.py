@@ -40,7 +40,12 @@ DEFAULT_ORIGIN = "UNKNOWN"
 ORIGIN_PREFIXES = {
     "UI_IMPORT": "UI_IMPORT",
     "FTP": "FTP",
+    "S3": "S3",
     "API": "API",
+    # Canaux d'ingestion : sans ces entrées, les dépôts mail et web service
+    # retombaient sur UNKNOWN au parsing (origine perdue dans les statistiques).
+    "MAIL": "MAIL",
+    "WS": "WS",
 }
 
 

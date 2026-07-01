@@ -1,4 +1,4 @@
-"""Tests d'intégration de la tâche de détection multi-document."""
+"""Tests d'intégration de la tâche multi-document (segmentation OpenCV locale)."""
 
 from __future__ import annotations
 
@@ -41,17 +41,14 @@ def _payload():
     }
 
 
-def _result(count, docs, cost=0.0):
-    from alambic_core.ai.multi_doc_detector import MultiDocResult
+def _seg(count, docs):
+    from alambic_core.vision import SegmentResult
 
-    return MultiDocResult(
-        count=count, documents=docs, cost=cost, provider="mistral",
-        model="pixtral-large-latest", source="vision_vpixtral-large-latest",
-    )
+    return SegmentResult(count=count, documents=docs, method="opencv_v1")
 
 
 def test_multi_doc_disabled_skips():
-    """multi_doc_detect désactivé → aucun sous-doc, pas d'appel vision."""
+    """multi_doc_detect désactivé → aucun sous-doc, pas de segmentation."""
     dbfile, Sess, engine = _setup()
     from alambic_core.models import Config, Transaction
 
@@ -62,15 +59,17 @@ def test_multi_doc_disabled_skips():
         s.add(Config(id="cfg1", config_name="c", multi_doc_detect=False))
         s.commit()
 
-    out = detect_multi_doc(_payload())
+    with patch("alambic_workers.tasks.multi_doc.segment_from_png_bytes") as seg:
+        out = detect_multi_doc(_payload())
     assert out["children"] == []
+    seg.assert_not_called()
     engine.dispose()
     with suppress(OSError):
         os.unlink(dbfile)
 
 
-def test_multi_doc_single_records_cost():
-    """Mono-document : pas de sous-doc, mais le coût Pixtral est tracé."""
+def test_multi_doc_single_no_children():
+    """Mono-document : pas de sous-doc, aucun coût (traitement local gratuit)."""
     dbfile, Sess, engine = _setup()
     from alambic_core.models import Config, Cost, Transaction
 
@@ -82,30 +81,27 @@ def test_multi_doc_single_records_cost():
         s.commit()
 
     with (
-        patch("alambic_workers.tasks.multi_doc.storage.get_bytes", return_value=b"%PDF-fake"),
+        patch("alambic_workers.tasks.multi_doc.storage.get_bytes", return_value=b"%PDF"),
         patch("alambic_workers.tasks.multi_doc._first_page_to_png", return_value=b"PNG"),
         patch(
-            "alambic_workers.tasks.multi_doc.MultiDocDetector.detect",
-            return_value=_result(1, [], cost=0.001),
+            "alambic_workers.tasks.multi_doc.segment_from_png_bytes",
+            return_value=_seg(1, []),
         ),
     ):
         out = detect_multi_doc(_payload())
 
     assert out["children"] == []
     assert out["multi_doc"]["detected"] is False
+    assert out["multi_doc"]["method"] == "opencv_v1"
     with Sess() as s:
-        costs = s.query(Cost).filter_by(process="DETECT_MULTI_DOC").all()
-        assert len(costs) == 1
-        assert costs[0].provider == "mistral"
-        assert costs[0].source == "vision_vpixtral-large-latest"
-        assert float(costs[0].amount) == 0.001
+        assert s.query(Cost).filter_by(process="DETECT_MULTI_DOC").count() == 0
     engine.dispose()
     with suppress(OSError):
         os.unlink(dbfile)
 
 
 def test_multi_doc_creates_subdocs():
-    """Multi-document : N sous-docs croppés, parent déprécié, coût tracé."""
+    """Multi-document : N sous-docs croppés, parent déprécié, aucun coût."""
     dbfile, Sess, engine = _setup()
     from alambic_core.domain.enums import DocumentStatus
     from alambic_core.models import Config, Cost, Document, Transaction
@@ -124,39 +120,37 @@ def test_multi_doc_creates_subdocs():
         s.commit()
 
     docs = [
-        {"type": "Carte Grise", "confidence": 0.9, "bbox": {"x": 2, "y": 2, "w": 45, "h": 35}},
-        {"type": "Permis", "confidence": 0.88, "bbox": {"x": 50, "y": 50, "w": 45, "h": 40}},
+        {"bbox": {"x": 2, "y": 2, "w": 45, "h": 35}},
+        {"bbox": {"x": 50, "y": 50, "w": 45, "h": 40}},
     ]
 
     with (
-        patch("alambic_workers.tasks.multi_doc.storage.get_bytes", return_value=b"%PDF-fake"),
+        patch("alambic_workers.tasks.multi_doc.storage.get_bytes", return_value=b"%PDF"),
         patch("alambic_workers.tasks.multi_doc._first_page_to_png", return_value=b"PNG"),
         patch("alambic_workers.tasks.multi_doc._crop_to_pdf", return_value=b"%PDF-crop"),
         patch("alambic_workers.tasks.multi_doc.storage.put_object", return_value=None),
         patch(
-            "alambic_workers.tasks.multi_doc.MultiDocDetector.detect",
-            return_value=_result(2, docs, cost=0.003),
+            "alambic_workers.tasks.multi_doc.segment_from_png_bytes",
+            return_value=_seg(2, docs),
         ),
     ):
         out = detect_multi_doc(_payload())
 
-    # 2 sous-docs créés.
     assert out["multi_doc"]["detected"] is True
     assert len(out["children"]) == 2
     assert out["children"][0]["source"] == "multi_doc_split"
 
     with Sess() as s:
-        # Sous-docs persistés avec parent_id et statut à ré-OCRiser.
         subs = s.query(Document).filter_by(parent_id="doc1").all()
         assert len(subs) == 2
         assert all(d.status == DocumentStatus.CONVERTED_TO_PDF.value for d in subs)
-        # Parent déprécié.
+        # Le sous-doc doit repartir AVANT l'OCR (sinon le step OCR le saute et le
+        # doc arrive vide à la classification). process=FILE_CONVERTED garantit
+        # que read_ocr s'exécutera bien sur le crop.
+        assert all(d.process == "FILE_CONVERTED" for d in subs)
         parent = s.get(Document, "doc1")
         assert parent.status == DocumentStatus.DEPRECATED.value
-        # Coût tracé.
-        costs = s.query(Cost).filter_by(process="DETECT_MULTI_DOC").all()
-        assert len(costs) == 1
-        assert float(costs[0].amount) == 0.003
+        assert s.query(Cost).filter_by(process="DETECT_MULTI_DOC").count() == 0
     engine.dispose()
     with suppress(OSError):
         os.unlink(dbfile)
@@ -176,41 +170,34 @@ def test_multi_doc_subdoc_not_redetected():
 
     payload = _payload()
     payload["document"]["source"] = "multi_doc_split"
-    out = detect_multi_doc(payload)
+    with patch("alambic_workers.tasks.multi_doc.segment_from_png_bytes") as seg:
+        out = detect_multi_doc(payload)
     assert out["children"] == []
+    seg.assert_not_called()
     engine.dispose()
     with suppress(OSError):
         os.unlink(dbfile)
 
 
-def test_render_resolution_is_capped():
-    """Le rendu d'une grande page est borné en pixels (anti-OOM)."""
-    import io
-
+def test_zoom_floor_upscales_small_pages():
+    """Un PDF défini en points (petit à zoom 1) est agrandi jusqu'au plancher,
+    sinon la segmentation manque de résolution."""
     import fitz
-    from PIL import Image
 
-    from alambic_workers.tasks.multi_doc import (
-        _CROP_MAX_PIXELS,
-        _DETECT_MAX_PIXELS,
-        _first_page_to_png,
-        _zoom_for,
-    )
+    from alambic_workers.tasks.multi_doc import _zoom_for
 
-    # Grande page ~12 Mpx à zoom 1 (simule un scan haute résolution).
+    # Page A4 en points (595x841 ≈ 0.5 Mpx à zoom 1) → doit être agrandie.
     doc = fitz.open()
-    doc.new_page(width=3000, height=4000)
-    pdf_bytes = doc.tobytes()
+    doc.new_page(width=595, height=841)
+    z = _zoom_for(doc[0], max_pixels=8_000_000, min_pixels=2_000_000)
     doc.close()
+    assert z > 1.0  # agrandissement
+    assert 595 * 841 * z * z >= 1_900_000  # atteint ~le plancher
 
-    detect = Image.open(io.BytesIO(_first_page_to_png(pdf_bytes, max_pixels=_DETECT_MAX_PIXELS)))
-    assert detect.width * detect.height <= _DETECT_MAX_PIXELS * 1.05
-
-    crop = Image.open(io.BytesIO(_first_page_to_png(pdf_bytes, max_pixels=_CROP_MAX_PIXELS)))
-    assert crop.width * crop.height <= _CROP_MAX_PIXELS * 1.05
-
-    # Une petite page n'est jamais upscalée.
-    small = fitz.open()
-    small.new_page(width=595, height=842)
-    assert _zoom_for(small[0], _CROP_MAX_PIXELS) == 1.0
-    small.close()
+    # Grande page déjà au-dessus du plafond → réduite.
+    doc = fitz.open()
+    doc.new_page(width=4000, height=5000)
+    z2 = _zoom_for(doc[0], max_pixels=8_000_000, min_pixels=2_000_000)
+    doc.close()
+    assert z2 < 1.0
+    assert 4000 * 5000 * z2 * z2 <= 8_100_000

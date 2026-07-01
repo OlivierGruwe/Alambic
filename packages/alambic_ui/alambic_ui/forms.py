@@ -13,7 +13,7 @@ from wtforms import (
     SubmitField,
     TextAreaField,
 )
-from wtforms.validators import DataRequired, EqualTo, Length, Optional
+from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional
 
 
 class LoginForm(FlaskForm):
@@ -40,6 +40,14 @@ class AccountForm(FlaskForm):
     zip = StringField("Code postal", validators=[Optional(), Length(max=20)])
     town = StringField("Ville", validators=[Optional(), Length(max=255)])
     country = StringField("Pays", validators=[Optional(), Length(max=100)])
+
+    # Contact (responsable du compte).
+    contact_name = StringField("Nom du responsable", validators=[Optional(), Length(max=255)])
+    contact_role = StringField("Fonction / rôle", validators=[Optional(), Length(max=255)])
+    contact_email = StringField(
+        "Email du responsable", validators=[Optional(), Email(), Length(max=320)]
+    )
+    contact_phone = StringField("Téléphone", validators=[Optional(), Length(max=50)])
 
     # Allowlist anti-SSRF : domaines autorisés pour l'enrichissement (chaîne,
     # séparés par virgules/points-virgules). Vide = aucun WS autorisé (fail-closed).

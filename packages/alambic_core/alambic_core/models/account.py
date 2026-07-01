@@ -28,6 +28,12 @@ class Account(Base, TimestampMixin, AuditMixin):
     town: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     country: Mapped[str] = mapped_column(String(100), nullable=False, default="")
 
+    # ── Contact (responsable du compte) ──────────────────────────────────────
+    contact_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    contact_role: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    contact_email: Mapped[str] = mapped_column(String(320), nullable=False, default="")
+    contact_phone: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+
     # ── Secrets chiffrés au repos ────────────────────────────────────────────
     edenai_secret_key: Mapped[str] = mapped_column(
         EncryptedString(2048), nullable=False, default=""

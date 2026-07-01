@@ -65,6 +65,8 @@
   .val-pending { color:var(--warning-500,#f59e0b); margin-left:3px; }
   .doc-validate-btn { border:none; background:var(--teal,#0FB3A6); color:#fff; cursor:pointer;
     font-size:12px; padding:3px 10px; border-radius:6px; }
+  .doc-reclassify-btn { border:none; background:var(--warning-500,#f59e0b); color:#fff; cursor:pointer;
+    font-size:12px; padding:3px 10px; border-radius:6px; }
   .val-modal { position:fixed; inset:0; background:rgba(14,33,64,.55); z-index:1000;
     display:flex; align-items:center; justify-content:center; }
   .val-modal-box { background:#fff; border-radius:10px; width:98vw; height:96vh;
@@ -108,6 +110,7 @@
     border-radius:6px; font-size:14px; }
   .val-field.low-score input { border-color:var(--warning-500,#f59e0b); background:#fffbeb; }
   .val-field .val-score { font-size:11px; color:var(--slate-400); margin-left:6px; }
+  .val-field .val-empty { font-size:11px; color:var(--warning-500,#f59e0b); margin-left:6px; font-style:italic; }
   .val-modal-actions { display:flex; gap:10px; margin-top:12px; padding-top:12px;
     border-top:1px solid var(--slate-100); }
   .btn-primary { background:var(--teal,#0FB3A6); color:#fff; border:none; }
@@ -188,6 +191,7 @@
       {{ sort_th("Date", "creation_date") }}
       {{ sort_th("Compte", "account_id") }}
       {{ sort_th("Config", "config__id") }}
+      {{ sort_th("Origine", "origin") }}
       {{ sort_th("État", "status") }}
       {{ sort_th("Process", "process") }}
       <th>Validation</th>
@@ -208,6 +212,7 @@
       <td onclick="toggleDocs('{{ tx.id }}')">{{ tx.created_at.strftime("%d/%m/%Y %H:%M") if tx.created_at else "—" }}</td>
       <td onclick="toggleDocs('{{ tx.id }}')">{{ tx.account }}</td>
       <td onclick="toggleDocs('{{ tx.id }}')">{{ tx.config }}</td>
+      <td onclick="toggleDocs('{{ tx.id }}')">{{ tx.origin }}</td>
       <td onclick="toggleDocs('{{ tx.id }}')"><span class="st st-{{ tx.status|lower }}" data-st-for="{{ tx.id }}">{{ tx.status }}</span></td>
       <td onclick="toggleDocs('{{ tx.id }}')">{{ tx.process or "—" }}</td>
       <td onclick="toggleDocs('{{ tx.id }}')">
@@ -396,6 +401,62 @@ function _loadPdfJs() {
   });
 }
 
+async function openReclassify(docId) {
+  // Charge les doctypes proposables pour ce document (selon sa config).
+  let info;
+  try {
+    const res = await fetch(`/transactions/documents/${docId}/doctypes`);
+    if (!res.ok) throw new Error("chargement doctypes");
+    info = await res.json();
+  } catch (e) {
+    alert("Impossible de charger les types de documents.");
+    return;
+  }
+  const options = (info.doctypes || []).slice();
+  if (!options.length && !info.let_it_guess) {
+    alert("Aucun type de document n'est déclaré dans la configuration.");
+    return;
+  }
+  // Construit l'invite de sélection (les types de la config + « laisser deviner »).
+  let prompt_msg = "Choisissez le type de document :\n";
+  options.forEach((d, i) => { prompt_msg += `  ${i + 1}. ${d}\n`; });
+  if (info.let_it_guess) {
+    prompt_msg += `  ${options.length + 1}. (laisser deviner automatiquement)\n`;
+  }
+  if (info.current) prompt_msg += `\nType actuel : ${info.current}`;
+
+  const raw = window.prompt(prompt_msg, "1");
+  if (raw === null) return;
+  const idx = parseInt(raw, 10);
+  let doctype;
+  if (info.let_it_guess && idx === options.length + 1) {
+    doctype = "__guess__";  // laisse le pipeline re-deviner
+  } else if (idx >= 1 && idx <= options.length) {
+    doctype = options[idx - 1];
+  } else {
+    alert("Sélection invalide.");
+    return;
+  }
+
+  try {
+    const res = await fetch(`/transactions/documents/${docId}/reclassify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token() }}" },
+      body: JSON.stringify({ doctype: doctype }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert("Reclassification refusée : " + (data.error || res.status));
+      return;
+    }
+    alert(`Document classé « ${data.doctype} ». L'extraction est relancée.`);
+    // Rafraîchit la liste des documents de la transaction.
+    if (typeof refreshStatuses === "function") refreshStatuses();
+  } catch (e) {
+    alert("Erreur lors de la reclassification.");
+  }
+}
+
 async function openValidation(txId, docId) {
   _valTxId = txId;
   document.getElementById("val-modal").style.display = "flex";
@@ -477,19 +538,23 @@ async function loadDocument(docId) {
 function renderFields(indexes) {
   const list = document.getElementById("val-fields-list");
   if (!indexes.length) {
-    list.innerHTML = "<p>Aucun champ extrait.</p>";
+    list.innerHTML = "<p>Aucun champ défini pour ce type de document.</p>";
     return;
   }
   list.innerHTML = "";
   indexes.forEach((idx, i) => {
     const score = parseFloat(idx.index_score || "0");
     const low = score > 0 && score < 0.9;
+    const notExtracted = idx.extracted === false;
     const wrap = document.createElement("div");
     wrap.className = "val-field" + (low ? " low-score" : "");
     wrap.innerHTML =
       `<label>${idx.index_name}` +
       (idx.index_score ? `<span class="val-score">score ${score.toFixed(2)}</span>` : "") +
-      `</label><input type="text" data-name="${idx.index_name}" value="${(idx.index_value || "").replace(/"/g, "&quot;")}">`;
+      (notExtracted ? `<span class="val-empty">à saisir</span>` : "") +
+      `</label><input type="text" data-name="${idx.index_name}" ` +
+      `placeholder="${notExtracted ? 'Non extrait — saisir manuellement' : ''}" ` +
+      `value="${(idx.index_value || "").replace(/"/g, "&quot;")}">`;
     list.appendChild(wrap);
   });
 }
